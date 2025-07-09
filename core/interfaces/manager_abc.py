@@ -1,18 +1,29 @@
-# core/interfaces/manager_abc.py
+# terran/managers/economy_manager.py
 
-from abc import ABC, abstractmethod
+from sc2.bot_ai import BotAI
+from sc2.unit_command import UnitCommand
+
+from core.interfaces.manager_abc import Manager
+from core.global_cache import GlobalCache
+from core.event_bus import EventBus
 
 
-class Manager(ABC):
+class TerranEconomyManager(Manager):
     """
-    Defines the abstract contract for any high-level domain Manager.
-    e.g., EconomyManager, MilitaryManager.
+    Manages the Terran economy, including SCV production, MULEs,
+    and expansion timing.
     """
 
-    @abstractmethod
-    async def execute(self):
+    def __init__(self, bot: BotAI):
+        self.bot = bot  # Needed as an action factory, e.g., self.bot.train(...)
+
+    async def execute(self, cache: GlobalCache, bus: EventBus) -> list[UnitCommand]:
         """
-        The main execution method for the manager, called by its General
-        on every game step.
+        Reads from the cache and decides on economic actions.
+
+        :param cache: The current game state analysis.
+        :param bus: The event bus for reactive actions.
+        :return: A list of commands to be executed.
         """
-        pass
+        # Logic for managing SCVs, MULEs, and expansions will go here.
+        return []
