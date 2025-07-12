@@ -1,5 +1,3 @@
-# core/utilities/events.py
-
 from enum import Enum, auto
 from dataclasses import dataclass
 from typing import TYPE_CHECKING

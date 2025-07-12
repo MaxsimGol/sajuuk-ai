@@ -1,12 +1,26 @@
 {
     "cSpell.words": [
+        "BANELING",
         "BARRACKSTECHLAB",
+        "BATTLECRUISER",
+        "BROODLORD",
         "COMMANDCENTER",
+        "HIGHTEMPLAR",
+        "HYDRALISK",
+        "INFESTOR",
+        "LIBERATORAG",
+        "LURKERMPBURROWED",
         "Namespacing",
         "ndarray",
         "ORBITALCOMMAND",
         "REAPERSPEED",
         "Sajuuk",
-        "SUPPLYDEPOT"
+        "SCVS",
+        "SIEGETANK",
+        "SIEGETANKSIEGED",
+        "Starport",
+        "SUPPLYDEPOT",
+        "ULTRALISK",
+        "ZERGLING"
     ]
 }
