@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Coroutine
+
+from core.types import CommandFunctor
 
 if TYPE_CHECKING:
     from sc2.bot_ai import BotAI
-    from sc2.unit_command import UnitCommand
     from core.global_cache import GlobalCache
     from core.event_bus import EventBus
 
@@ -21,7 +22,7 @@ class Manager(ABC):
         self.bot = bot
 
     @abstractmethod
-    async def execute(self, cache: GlobalCache, bus: EventBus) -> list[UnitCommand]:
+    async def execute(self, cache: GlobalCache, bus: EventBus) -> list[CommandFunctor]:
         """
         The main execution method for the manager, called by its Director.
 
