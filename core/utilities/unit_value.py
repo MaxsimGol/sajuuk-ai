@@ -1,6 +1,9 @@
+# core/utilities/unit_value.py
+
 from typing import TYPE_CHECKING
 from sc2.ids.unit_typeid import UnitTypeId
 
+# This block was missing. It provides the definitions for type hints.
 if TYPE_CHECKING:
     from sc2.game_data import GameData
     from sc2.units import Units
@@ -61,7 +64,7 @@ def calculate_threat_value(unit_type_id: UnitTypeId) -> float:
     return THREAT_SCORE_MAP.get(unit_type_id, DEFAULT_THREAT_SCORE)
 
 
-def calculate_resource_value(unit_type_id: UnitTypeId, game_data: GameData) -> int:
+def calculate_resource_value(unit_type_id: UnitTypeId, game_data: "GameData") -> int:
     """
     Calculates the combined mineral and vespene cost of a unit.
 
@@ -74,7 +77,7 @@ def calculate_resource_value(unit_type_id: UnitTypeId, game_data: GameData) -> i
     return cost.minerals + cost.vespene
 
 
-def calculate_army_value(units: Units, game_data: GameData) -> int:
+def calculate_army_value(units: "Units", game_data: "GameData") -> int:
     """
     Calculates the total resource value of a collection of units.
 
@@ -85,6 +88,9 @@ def calculate_army_value(units: Units, game_data: GameData) -> int:
     :return: The sum of the resource values of all units in the collection.
     """
     total_value = 0
+    if not units:
+        return total_value
+
     for unit in units:
         total_value += calculate_resource_value(unit.type_id, game_data)
     return total_value

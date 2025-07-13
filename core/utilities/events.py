@@ -1,7 +1,9 @@
+from __future__ import annotations
 from enum import Enum, auto
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+# This block was missing. It provides the definitions for type hints.
 if TYPE_CHECKING:
     from sc2.ids.unit_typeid import UnitTypeId
     from sc2.position import Point2
@@ -45,8 +47,8 @@ class EventType(Enum):
 class BuildRequestPayload:
     """Payload for an INFRA_BUILD_REQUEST event."""
 
-    item_id: UnitTypeId
-    position: Point2 | None = None
+    item_id: "UnitTypeId"
+    position: "Point2" | None = None
     priority: int = 10  # Lower number is higher priority
 
 
@@ -54,7 +56,7 @@ class BuildRequestPayload:
 class BuildRequestFailedPayload:
     """Payload for an INFRA_BUILD_REQUEST_FAILED event."""
 
-    item_id: UnitTypeId
+    item_id: "UnitTypeId"
     reason: str
 
 
@@ -62,7 +64,7 @@ class BuildRequestFailedPayload:
 class EnemyTechScoutedPayload:
     """Payload for a TACTICS_ENEMY_TECH_SCOUTED event."""
 
-    tech_id: UnitTypeId
+    tech_id: "UnitTypeId"
 
 
 @dataclass
@@ -82,5 +84,5 @@ class Event:
     A generic wrapper for all events published to the EventBus.
     """
 
-    type: EventType
+    event_type: EventType
     payload: object | None = None

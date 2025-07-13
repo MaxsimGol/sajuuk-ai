@@ -6,10 +6,10 @@ needing to modify the underlying logic of the managers or directors.
 All values here should be considered a starting point for optimization.
 """
 
-# --- System & Performance ---
-# How often, in game frames, to run expensive calculations in the GlobalCache.
-# A lower number is more responsive but costs more CPU. (22.4 frames ≈ 1 second)
-DETAILED_CACHE_UPDATE_FREQUENCY_FRAMES: int = 8
+# --- Analysis Scheduling ---
+# Determines how often one of the "heavy" analysis tasks is run.
+# A value of 8 means one low-frequency task will be executed every 8 frames.
+LOW_FREQUENCY_TASK_RATE: int = 8
 
 # --- Event Bus Priorities ---
 # Defines the processing order for events within the EventBus.

@@ -1,15 +1,18 @@
+# core/utilities/geometry.py
+
 import math
 from typing import TYPE_CHECKING, Set
 
 import numpy as np
 
+# This block was missing. It provides the definitions for type hints.
 if TYPE_CHECKING:
     from sc2.position import Point2
     from sc2.units import Units
 
 
 def create_threat_map(
-    enemy_units: Units, map_size: tuple[int, int], threat_radius: int = 15
+    enemy_units: "Units", map_size: tuple[int, int], threat_radius: int = 15
 ) -> np.ndarray:
     """
     Generates a 2D numpy array representing a "threat map" of the battlefield.
@@ -41,16 +44,17 @@ def create_threat_map(
         for x in range(x_min, x_max):
             for y in range(y_min, y_max):
                 dist_sq = (pos.x - x) ** 2 + (pos.y - y) ** 2
-                # Apply a falloff effect: threat is highest at the center
-                falloff = 1 - (math.sqrt(dist_sq) / threat_radius)
-                threat_map[x, y] += threat_value * falloff
+                if dist_sq <= threat_radius**2:
+                    # Apply a falloff effect: threat is highest at the center
+                    falloff = 1 - (math.sqrt(dist_sq) / threat_radius)
+                    threat_map[x, y] += threat_value * falloff
 
     return threat_map
 
 
 def find_safe_point_from_threat_map(
-    threat_map: np.ndarray, reference_point: Point2, search_radius: int = 20
-) -> Point2:
+    threat_map: np.ndarray, reference_point: "Point2", search_radius: int = 20
+) -> "Point2":
     """
     Finds the point with the lowest threat score on the map within a given
     search radius of a reference point.

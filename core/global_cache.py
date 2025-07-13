@@ -1,76 +1,114 @@
 # core/global_cache.py
 
+from __future__ import annotations
 from typing import TYPE_CHECKING
+
 import numpy as np
+from sc2.ids.upgrade_id import UpgradeId
+from sc2.ids.unit_typeid import UnitTypeId
 
 if TYPE_CHECKING:
+    from sc2.bot_ai import BotAI
     from sc2.game_state import GameState
     from sc2.units import Units
+    from sc2.game_info import Ramp
+    from sc2.position import Point2
 
 
 class GlobalCache:
     """
-    The bot's long-term, read-only memory and analytical engine.
+    A passive data container for the bot's "world state" on a single frame.
 
-    This class is instantiated once by the Sajuuk Conductor. Its `update`
-    method is called exactly once per frame. All other components in the
-    architecture treat this object as strictly read-only. It translates the
-    raw game state into high-level, actionable insights.
+    This class is the definitive, read-only source of truth for all other
+    components during a game step. It is intentionally "dumb" and contains
+    no complex logic. Its attributes are populated by two external sources:
+    1.  High-frequency data is populated by this class's own `update` method.
+    2.  Low-frequency, expensive analysis (like threat maps) is calculated by
+        the `GameAnalyzer` and written into this cache's attributes.
     """
 
     def __init__(self):
-        """
-        Initializes the cache properties. These will be refreshed each frame.
-        """
-        # --- Fast Cache (Updated every frame) ---
-        self.my_units: Units | None = None
-        self.my_structures: Units | None = None
+        # --- Bot Object Reference ---
+        self.bot: BotAI | None = None
+
+        # --- Game State ---
+        self.game_loop: int = 0
+
+        # --- Core Resources ---
+        self.minerals: int = 0
+        self.vespene: int = 0
+        self.supply_left: int = 0
+        self.supply_cap: int = 0
+        self.supply_used: int = 0
+
+        # --- Friendly State ---
+        self.friendly_units: Units | None = None
+        self.friendly_structures: Units | None = None
+        self.friendly_workers: Units | None = None
+        self.friendly_army_units: Units | None = None
+        self.idle_production_structures: Units | None = None
+        self.friendly_upgrades: set[UpgradeId] | None = None
+
+        # --- Enemy State ---
         self.enemy_units: Units | None = None
         self.enemy_structures: Units | None = None
-        self.resources: dict | None = None  # Minerals, Vespene, Supply
+        self.known_enemy_structures: Units | None = None
 
-        # --- Detailed Cache (Updated every N frames to save performance) ---
+        # --- Map Information ---
+        self.map_ramps: list[Ramp] | None = None
+        self.expansion_locations: list[Point2] | None = None
+
+        # --- Analytical Data (Populated by GameAnalyzer) ---
         self.threat_map: np.ndarray | None = None
-        self.enemy_army_value: float = 0.0
+        self.friendly_army_value: int = 0
+        self.enemy_army_value: int = 0
 
-    def update(self, game_state: GameState):
+    def update(self, game_state: GameState, bot_object: BotAI):
         """
-        Updates the cache with the new game state. This is the ONLY place
-        the cache is written to.
-
-        :param game_state: The raw game_state object from the BotAI.
+        Populates the cache with high-frequency, low-cost data from the
+        current game state.
         """
-        # --- Update Fast Cache every frame ---
-        self._update_unit_lists(game_state)
-        self._update_resources(game_state)
+        self.bot = bot_object
+        self.game_loop = game_state.game_loop
 
-        # --- Update Detailed Cache periodically ---
-        # Example: if game_state.game_loop % 8 == 0:
-        #     self._calculate_threat_map()
-        #     self._calculate_enemy_army_value()
-        pass
+        self._update_common_state(game_state)
+        self._update_unit_collections(game_state)
 
-    def _update_unit_lists(self, game_state: GameState):
-        """Populates the core unit and structure lists."""
-        self.my_units = game_state.units
-        self.my_structures = game_state.structures
+    def _update_common_state(self, game_state: GameState):
+        """Updates simple, high-frequency state attributes from the game_state."""
+        self.minerals = game_state.common.minerals
+        self.vespene = game_state.common.vespene
+        self.supply_used = game_state.common.food_used
+        self.supply_cap = game_state.common.food_cap
+        self.supply_left = self.supply_cap - self.supply_used
+        self.friendly_upgrades = game_state.upgrades
+
+        # Static map info is populated only once at the start of the game.
+        if self.game_loop == 0:
+            self.map_ramps = self.bot.game_info.map_ramps
+            self.expansion_locations = self.bot.expansion_locations_list
+
+    def _update_unit_collections(self, game_state: GameState):
+        """Updates and filters all friendly and enemy unit collections."""
+        all_friendly_units = game_state.units
+
+        self.friendly_units = all_friendly_units
+        self.friendly_structures = all_friendly_units.structure
+        self.friendly_workers = all_friendly_units.worker
+        self.friendly_army_units = all_friendly_units.not_structure.not_worker
+
         self.enemy_units = game_state.enemy_units
         self.enemy_structures = game_state.enemy_structures
 
-    def _update_resources(self, game_state: GameState):
-        """Populates resource information."""
-        self.resources = {
-            "minerals": game_state.minerals,
-            "vespene": game_state.vespene,
-            "supply_left": game_state.supply_left,
-            "supply_cap": game_state.supply_cap,
+        # This data is a bot-level memory, not available on the transient game_state.
+        self.known_enemy_structures = self.bot.known_enemy_structures
+
+        # Filter for idle production structures.
+        production_types = {
+            UnitTypeId.BARRACKS,
+            UnitTypeId.FACTORY,
+            UnitTypeId.STARPORT,
         }
-
-    # --- Placeholder methods for future complex analysis ---
-    def _calculate_threat_map(self):
-        """Generates a heatmap of enemy DPS across the map."""
-        pass
-
-    def _calculate_enemy_army_value(self):
-        """Calculates the total resource value of the visible enemy army."""
-        pass
+        self.idle_production_structures = self.friendly_structures.of_type(
+            production_types
+        ).idle
