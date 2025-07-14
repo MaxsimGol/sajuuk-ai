@@ -44,7 +44,14 @@ class Sajuuk(BotAI):
             await self.active_general.on_start()
 
     async def on_step(self, iteration: int):
-        # (Steps 1-3: PERCEIVE, ANALYZE, PLAN remain the same)
+        # 1. PERCEIVE
+        self.global_cache.update(self.state, self)
+
+        # 2. ANALYZE
+        self.game_analyzer.run_scheduled_tasks(self.global_cache, self)
+
+        # 3. PLAN
+        frame_plan = FramePlan()
 
         # 4. DECIDE
         command_functors: List[CommandFunctor] = await self.active_general.execute_step(

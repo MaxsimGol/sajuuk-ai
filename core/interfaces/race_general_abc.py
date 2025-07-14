@@ -1,13 +1,13 @@
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-from core.types import CommandFunctor
-
 if TYPE_CHECKING:
     from sc2.bot_ai import BotAI
-    from sc2.unit_command import UnitCommand
     from core.global_cache import GlobalCache
     from core.event_bus import EventBus
+    from core.frame_plan import FramePlan
+
+from core.types import CommandFunctor
 
 
 class RaceGeneral(ABC):
@@ -18,7 +18,7 @@ class RaceGeneral(ABC):
     It orchestrates all Directors for a given race.
     """
 
-    def __init__(self, bot: BotAI):
+    def __init__(self, bot: "BotAI"):
         self.bot = bot
 
     @abstractmethod
@@ -31,7 +31,7 @@ class RaceGeneral(ABC):
 
     @abstractmethod
     async def execute_step(
-        self, cache: GlobalCache, bus: EventBus
+        self, cache: "GlobalCache", plan: "FramePlan", bus: "EventBus"
     ) -> list[CommandFunctor]:
         """
         The main logic loop for the General, called every game step.

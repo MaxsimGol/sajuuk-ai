@@ -1,15 +1,13 @@
-# core/interfaces/director_abc.py
-
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Callable, Coroutine
-
-from core.types import CommandFunctor
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from sc2.bot_ai import BotAI
     from core.global_cache import GlobalCache
     from core.event_bus import EventBus
     from core.frame_plan import FramePlan
+
+from core.types import CommandFunctor
 
 
 class Director(ABC):
@@ -21,12 +19,12 @@ class Director(ABC):
     Managers to achieve a strategic goal.
     """
 
-    def __init__(self, bot: BotAI):
+    def __init__(self, bot: "BotAI"):
         self.bot = bot
 
     @abstractmethod
     async def execute(
-        self, cache: GlobalCache, plan: FramePlan, bus: EventBus
+        self, cache: "GlobalCache", plan: "FramePlan", bus: "EventBus"
     ) -> list[CommandFunctor]:
         """
         The main execution method for the Director, called by its General.

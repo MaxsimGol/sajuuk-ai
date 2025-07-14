@@ -14,6 +14,8 @@ if TYPE_CHECKING:
     from sc2.game_info import Ramp
     from sc2.position import Point2
 
+from core.utilities.unit_types import WORKER_TYPES, ALL_STRUCTURE_TYPES
+
 
 class GlobalCache:
     """
@@ -29,7 +31,7 @@ class GlobalCache:
 
     def __init__(self):
         # --- Bot Object Reference ---
-        self.bot: BotAI | None = None
+        self.bot: "BotAI" | None = None
 
         # --- Game State ---
         self.game_loop: int = 0
@@ -42,28 +44,28 @@ class GlobalCache:
         self.supply_used: int = 0
 
         # --- Friendly State ---
-        self.friendly_units: Units | None = None
-        self.friendly_structures: Units | None = None
-        self.friendly_workers: Units | None = None
-        self.friendly_army_units: Units | None = None
-        self.idle_production_structures: Units | None = None
-        self.friendly_upgrades: set[UpgradeId] | None = None
+        self.friendly_units: "Units" | None = None
+        self.friendly_structures: "Units" | None = None
+        self.friendly_workers: "Units" | None = None
+        self.friendly_army_units: "Units" | None = None
+        self.idle_production_structures: "Units" | None = None
+        self.friendly_upgrades: set["UpgradeId"] | None = None
 
         # --- Enemy State ---
-        self.enemy_units: Units | None = None
-        self.enemy_structures: Units | None = None
-        self.known_enemy_structures: Units | None = None
+        self.enemy_units: "Units" | None = None
+        self.enemy_structures: "Units" | None = None
+        self.known_enemy_structures: "Units" | None = None
 
         # --- Map Information ---
-        self.map_ramps: list[Ramp] | None = None
-        self.expansion_locations: list[Point2] | None = None
+        self.map_ramps: list["Ramp"] | None = None
+        self.expansion_locations: list["Point2"] | None = None
 
         # --- Analytical Data (Populated by GameAnalyzer) ---
         self.threat_map: np.ndarray | None = None
         self.friendly_army_value: int = 0
         self.enemy_army_value: int = 0
 
-    def update(self, game_state: GameState, bot_object: BotAI):
+    def update(self, game_state: "GameState", bot_object: "BotAI"):
         """
         Populates the cache with high-frequency, low-cost data from the
         current game state.
@@ -72,9 +74,9 @@ class GlobalCache:
         self.game_loop = game_state.game_loop
 
         self._update_common_state(game_state)
-        self._update_unit_collections(game_state)
+        self._update_unit_collections(bot_object)
 
-    def _update_common_state(self, game_state: GameState):
+    def _update_common_state(self, game_state: "GameState"):
         """Updates simple, high-frequency state attributes from the game_state."""
         self.minerals = game_state.common.minerals
         self.vespene = game_state.common.vespene
@@ -88,20 +90,26 @@ class GlobalCache:
             self.map_ramps = self.bot.game_info.map_ramps
             self.expansion_locations = self.bot.expansion_locations_list
 
-    def _update_unit_collections(self, game_state: GameState):
+    def _update_unit_collections(self, bot_object: "BotAI"):
         """Updates and filters all friendly and enemy unit collections."""
-        all_friendly_units = game_state.units
-
+        all_friendly_units = bot_object.units
         self.friendly_units = all_friendly_units
-        self.friendly_structures = all_friendly_units.structure
-        self.friendly_workers = all_friendly_units.worker
-        self.friendly_army_units = all_friendly_units.not_structure.not_worker
+        self.friendly_structures = all_friendly_units.filter(
+            lambda unit: unit.type_id in ALL_STRUCTURE_TYPES
+        )
+        self.friendly_workers = all_friendly_units.filter(
+            lambda unit: unit.type_id in WORKER_TYPES
+        )
+        self.friendly_army_units = all_friendly_units.filter(
+            lambda unit: unit.type_id not in ALL_STRUCTURE_TYPES
+            and unit.type_id not in WORKER_TYPES
+        )
 
-        self.enemy_units = game_state.enemy_units
-        self.enemy_structures = game_state.enemy_structures
+        self.enemy_units = bot_object.enemy_units
+        self.enemy_structures = bot_object.enemy_structures
 
         # This data is a bot-level memory, not available on the transient game_state.
-        self.known_enemy_structures = self.bot.known_enemy_structures
+        self.known_enemy_structures = bot_object.known_enemy_structures
 
         # Filter for idle production structures.
         production_types = {

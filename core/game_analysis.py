@@ -3,15 +3,16 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from core.utilities.geometry import create_threat_map
-from core.utilities.unit_value import calculate_army_value
-
-# Import the new constant for scheduling frequency
-from core.utilities.constants import LOW_FREQUENCY_TASK_RATE
-
 if TYPE_CHECKING:
     from sc2.bot_ai import BotAI
     from core.global_cache import GlobalCache
+    from sc2.unit import Unit
+    from sc2.units import Units
+
+from core.utilities.geometry import create_threat_map
+from core.utilities.unit_value import calculate_army_value
+from core.utilities.constants import LOW_FREQUENCY_TASK_RATE
+from core.utilities.unit_types import ALL_STRUCTURE_TYPES
 
 
 class HighFrequencyTask(Enum):
@@ -43,6 +44,7 @@ class GameAnalyzer:
 
         self._high_freq_index: int = 0
         self._low_freq_index: int = 0
+        self.known_enemy_structures: "Units" | None = None
 
     def run_scheduled_tasks(self, cache: "GlobalCache", bot: "BotAI"):
         """
