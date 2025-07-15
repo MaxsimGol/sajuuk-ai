@@ -12,9 +12,8 @@ from core.event_bus import EventBus
 from core.game_analysis import GameAnalyzer
 from core.frame_plan import FramePlan
 from core.types import CommandFunctor
-
-# Interfaces and Generals (No changes here)
 from core.interfaces.race_general_abc import RaceGeneral
+
 from terran.general.terran_general import TerranGeneral
 
 # ... other generals
@@ -55,7 +54,7 @@ class Sajuuk(BotAI):
 
         # 4. DECIDE
         command_functors: List[CommandFunctor] = await self.active_general.execute_step(
-            ...
+            self.global_cache, frame_plan, self.event_bus
         )
 
         # 5. ACT: Execute all collected command functors with intelligent handling.

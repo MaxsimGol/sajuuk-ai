@@ -6,8 +6,8 @@ import numpy as np
 if TYPE_CHECKING:
     from sc2.bot_ai import BotAI
     from core.global_cache import GlobalCache
-    from sc2.unit import Unit
-    from sc2.units import Units
+
+from sc2.data import race_townhalls
 
 from core.utilities.geometry import create_threat_map
 from core.utilities.unit_value import calculate_army_value
@@ -26,6 +26,7 @@ class LowFrequencyTask(Enum):
     """Defines heavyweight tasks that run on a slower, periodic cycle."""
 
     UPDATE_THREAT_MAP = auto()
+    UPDATE_AVAILABLE_EXPANSIONS = auto()
 
 
 class GameAnalyzer:
@@ -44,7 +45,6 @@ class GameAnalyzer:
 
         self._high_freq_index: int = 0
         self._low_freq_index: int = 0
-        self.known_enemy_structures: "Units" | None = None
 
     def run_scheduled_tasks(self, cache: "GlobalCache", bot: "BotAI"):
         """
@@ -75,7 +75,9 @@ class GameAnalyzer:
     ):
         """Executes a specific high-frequency analysis task."""
         if task == HighFrequencyTask.UPDATE_FRIENDLY_ARMY_VALUE:
-            army_units = bot.units.not_structure.not_worker
+            # Get your mobile army units excluding workers
+            exclude_tags = bot.workers.tags
+            army_units = bot.units.tags_not_in(exclude_tags)
             cache.friendly_army_value = calculate_army_value(army_units, bot.game_data)
         elif task == HighFrequencyTask.UPDATE_ENEMY_ARMY_VALUE:
             cache.enemy_army_value = calculate_army_value(
@@ -92,3 +94,18 @@ class GameAnalyzer:
                 cache.threat_map = create_threat_map(bot.enemy_units, map_size)
             elif cache.threat_map is None:
                 cache.threat_map = np.zeros(map_size, dtype=np.float32)
+        elif task == LowFrequencyTask.UPDATE_AVAILABLE_EXPANSIONS:
+            all_expansion_locations = set(bot.expansion_locations_list)
+            cache.occupied_locations = {th.position for th in bot.townhalls}
+            enemy_townhall_types = race_townhalls[bot.enemy_race]
+            cache.enemy_occupied_locations = {
+                enemy_townhall.position
+                for enemy_townhall in bot.enemy_structures.of_type(enemy_townhall_types)
+            }
+
+            # Available locations are those that are not occupied by us or the enemy.
+            cache.available_expansion_locations = (
+                all_expansion_locations
+                - cache.occupied_locations
+                - cache.enemy_occupied_locations
+            )

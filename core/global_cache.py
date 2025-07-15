@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from sc2.game_info import Ramp
     from sc2.position import Point2
 
+from core.game_analysis import GameAnalyzer
 from core.utilities.unit_types import WORKER_TYPES, ALL_STRUCTURE_TYPES
 
 
@@ -32,6 +33,8 @@ class GlobalCache:
     def __init__(self):
         # --- Bot Object Reference ---
         self.bot: "BotAI" | None = None
+
+        self._analyzer = GameAnalyzer()
 
         # --- Game State ---
         self.game_loop: int = 0
@@ -58,7 +61,9 @@ class GlobalCache:
 
         # --- Map Information ---
         self.map_ramps: list["Ramp"] | None = None
-        self.expansion_locations: list["Point2"] | None = None
+        self.occupied_locations: set[Point2] = set()
+        self.enemy_occupied_locations: set[Point2] = set()
+        self.available_expansion_locations: set[Point2] = set()
 
         # --- Analytical Data (Populated by GameAnalyzer) ---
         self.threat_map: np.ndarray | None = None
@@ -70,7 +75,8 @@ class GlobalCache:
         Populates the cache with high-frequency, low-cost data from the
         current game state.
         """
-        self.bot = bot_object
+        if self.bot is None:
+            self._initialize_first_time(bot_object)
         self.game_loop = game_state.game_loop
 
         self._update_common_state(game_state)
@@ -88,7 +94,6 @@ class GlobalCache:
         # Static map info is populated only once at the start of the game.
         if self.game_loop == 0:
             self.map_ramps = self.bot.game_info.map_ramps
-            self.expansion_locations = self.bot.expansion_locations_list
 
     def _update_unit_collections(self, bot_object: "BotAI"):
         """Updates and filters all friendly and enemy unit collections."""
@@ -108,9 +113,6 @@ class GlobalCache:
         self.enemy_units = bot_object.enemy_units
         self.enemy_structures = bot_object.enemy_structures
 
-        # This data is a bot-level memory, not available on the transient game_state.
-        self.known_enemy_structures = bot_object.known_enemy_structures
-
         # Filter for idle production structures.
         production_types = {
             UnitTypeId.BARRACKS,
@@ -120,3 +122,16 @@ class GlobalCache:
         self.idle_production_structures = self.friendly_structures.of_type(
             production_types
         ).idle
+
+    def _initialize_first_time(self, bot_object: "BotAI"):
+        """
+        Performs all one-time setup tasks for the cache and its subsystems.
+        """
+        # Set the persistent bot reference.
+        self.bot = bot_object
+
+        # Initialize the internal analyzer.
+        self._analyzer = GameAnalyzer()
+
+        # This data is a bot-level memory, not available on the transient game_state.
+        self.map_ramps = self.bot.game_info.map_ramps
