@@ -13,8 +13,8 @@ EXCLUDE_FILES = {
     "README.md",
     "requirements.txt",
     ".gitignore",
-    "# scrape_sc2_library.py",
-    "# scrape_sc2_library.py",
+    "Design Document.md",
+    "scrape_sc2_library.py",
     OUTPUT_FILE,
 }
 LANGUAGE_MAP = {".py": "python", ".md": "markdown", ".txt": "text", ".json": "json"}

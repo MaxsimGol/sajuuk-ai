@@ -2,94 +2,6 @@
 
 ---
 
-### File: `Design Document.md`
-
-```markdown
-## **Design Document: Sajuuk AI (Final Blueprint)**
-
-**Version:** 4.0 - "The Crucible"
-**Date:** 7/9/25
-**Author:** Sajuuk, The Oracle
-
-### 1. Core Philosophy & Guiding Principles
-
-The mission remains: to create an **Adaptive Organism**, not a clockwork machine. This metaphor is not abstract; it is a technical directive grounded in three concrete systems:
-
-1.  **Sensing (The `GlobalCache`):** The bot's ability to build a comprehensive, read-only model of the world state each frame.
-2.  **Reacting (The `EventBus`):** The bot's "nervous system," allowing for instantaneous, reflexive responses to critical threats that bypass the main cognitive loop.
-3.  **Adapting (The `FramePlan` & Strategy Patterns):** The bot's "frontal lobe," enabling it to change its high-level strategic intentions frame-by-frame and even alter its entire decision-making hierarchy in response to its environment.
-
-To ensure this organism is resilient and maintainable, its development will be governed by the following inviolable architectural principles:
-
-*   **Unidirectional Data Flow:** Information flows in one direction. The `GlobalCache` and `FramePlan` are passed *down* the hierarchy (`General` -> `Director` -> `Manager`). Intentions (`UnitCommand` actions) are returned *up* the hierarchy. A component never directly modifies its parent or sibling; it only reads from the plan it was given and returns its intent.
-*   **Dependency Injection:** Components are given their dependencies (like the `cache` or `plan`) during their `execute` call. They do not hold persistent references to high-level services, making them highly decoupled and testable in isolation.
-*   **Stateless Methods, Stateful Objects:** Managers are designed to be stateful. A `ResearchManager` will maintain an internal queue of upgrades it needs to research. However, its `execute()` method will be functionally pure: given the same cache and plan, it will always return the same list of actions. All state changes are self-contained within the manager's own attributes.
-*   **Formal Action Resolution Policy:** The `General` is responsible for resolving action conflicts. If two managers issue a command for the same unit, a "last-writer-wins" policy is applied, based on the execution order of the Directors. Critical actions (like micro commands from the `Tactics` directorate) are executed last, giving them final authority for a frame. All conflicts will be logged in debug mode.
-
-### 2. The Hardened Core Services
-
-The three core services are the foundation of the bot's intelligence. They are implemented with specific safeguards to address performance, debugging, and state management risks.
-
-*   **`GlobalCache` (The Read-Only Memory):**
-    *   **Responsibility:** Provides a consistent snapshot of the world for a single frame.
-    *   **Hardening:** To manage performance, the cache update process is **tiered**.
-        *   **Fast Cache (Every Frame):** Unit positions, health, resources.
-        *   **Detailed Cache (Every N Frames):** Computationally expensive data like global threat maps or complex pathing grids are updated on a less frequent cycle to ensure high frame rates.
-
-*   **`EventBus` (The Reflexive Nervous System):**
-    *   **Responsibility:** Enables instant, decoupled reactions.
-    *   **Hardening:**
-        *   **Strict Registry & Namespacing:** All events *must* be defined in a central registry (`core/events.py`). Events are namespaced to their functional domain (e.g., `tactics.ProxyDetected`, `infra.BuildRequest`) to prevent collisions and clarify intent.
-        *   **Priority Levels:** Events are assigned a priority (`CRITICAL`, `NORMAL`). The bus will process critical events first, ensuring that a "dodge spell" reflex is handled before a "queue new unit" notification.
-
-*   **`FramePlan` (The Strategic Scratchpad):**
-    *   **Responsibility:** To hold the strategic intentions for the current frame.
-    *   **Hardening:**
-        *   **Feasibility & Constraint Reporting:** Managers can "push back" against the plan. If the `ConstructionManager` receives a `BuildRequest` it cannot fulfill (e.g., no available SCV, location blocked), it will publish a `BuildRequestFailed` event to the `EventBus`. The originating Director can subscribe to this failure event and revise its strategy on the next frame (e.g., try a different location or build something else).
-
-### 3. The Cognitive Loop: How a Decision is Made
-
-A single frame demonstrates the entire architecture in action. **Goal: The bot has just scouted an enemy Stargate.**
-
-1.  **Frame N: PERCEIVE & PUBLISH**
-    *   `sajuuk.py` updates the `GlobalCache` with the latest game state.
-    *   The `ScoutingManager` runs. It sees the Stargate. It **publishes** a `tactics.EnemyTechScouted` event with the payload `{'tech': 'STARGATE'}` to the `EventBus`. At this moment, nothing else happens. The AI is still "thinking" about its old plan.
-
-2.  **Frame N+1: PLAN & ADAPT**
-    *   `sajuuk.py` updates the cache. The `TerranGeneral` creates a new, empty `FramePlan`.
-    *   **`InfrastructureDirector` runs:** It analyzes the cache, sees no immediate threat, and **writes its budget to the `FramePlan`**: `plan.set_budget({'army': 60, 'tech': 40})`.
-    *   **`CapabilityDirector` runs:**
-        *   It first checks the `EventBus` history for relevant events from the last frame. It sees `tactics.EnemyTechScouted`.
-        *   This new information **overrides its default logic**.
-        *   It reads the budget from the `FramePlan`.
-        *   It formulates a new production goal: "We need anti-air. Spend the budget on 1 Viking and 1 Missile Turret."
-        *   It passes these goals to its subordinate managers.
-    *   **`TacticalDirector` runs:** It also sees the Stargate event. It **writes the army stance to the `FramePlan`**: `plan.set_stance('DEFENSIVE_POSTURE')`.
-
-3.  **Frame N+1: EXECUTE**
-    *   The `ArmyUnitManager` (under `Capabilities`) receives the goal "build Viking." It has the internal state `self.queue = {'VIKING': 1}`. It returns a `train(VIKING)` command.
-    *   The `TechStructureManager` (under `Capabilities`) receives the goal "build Turret." It publishes a `infra.BuildRequest` for a `MISSILETURRET`.
-    *   The `ConstructionManager` (under `Infrastructure`) receives the `BuildRequest` event and returns the necessary `build` command with an SCV.
-    *   The `ArmyControlManager` (under `Tactics`) reads `plan.get_stance() == 'DEFENSIVE_POSTURE'` and returns commands to move its existing army to a safe position near its mineral lines.
-
-4.  **Frame N+1: RESOLVE & ACT**
-    *   The `TerranGeneral` collects all returned action lists. It resolves any conflicts using its defined policy.
-    *   The final, coherent list of actions is sent to `sajuuk.py` and executed.
-
-### 4. Long-Term Adaptability & Growth
-
-The architecture is designed to evolve beyond its initial implementation.
-
-*   **Strategy Patterns:** The `TerranGeneral` will be able to dynamically swap out entire Directorates. For example, upon scouting a Mech opponent, it can replace the default `CapabilityDirector` with a `MechCapabilityDirector` that prioritizes Factories and Thors over Barracks and Marines. This allows for true meta-adaptation.
-*   **Graceful Degradation:** Core managers will be built with fallback logic. If the `PositioningManager` fails to find a perfect defensive location, the `ArmyControlManager` will default to a simple "rally at main ramp" command, ensuring the bot remains functional even when a subsystem fails.
-*   **Meta-Learning Integration:** A `GameAnalytics` module will be added later. After a game, it will analyze the replay and opponent data. The `TerranGeneral`, at the start of a new game, can query this module to inform its initial choice of strategy, enabling it to learn from past encounters.
-*   **Debugging & Auditing:** Every significant decision (Director sets budget, Manager requests build) will be logged with a "reason." This creates a human-readable "decision chain" that makes it possible to trace exactly why the bot chose a specific action, which is invaluable for debugging and improvement.
-
-This document codifies a system that is not only organized and robust but is explicitly designed to house the complex, interconnected, and adaptive logic required to achieve the highest levels of competitive play.
-```
-
----
-
 ### File: `Files description.md`
 
 ```markdown
@@ -19215,7 +19127,7 @@ def main():
                 Bot(Race.Terran, Sajuuk(), name="Sajuuk"),
                 # Player 2 is a computer opponent with an "Easy" difficulty.
                 # This is ideal for initial testing and build order validation.
-                Computer(Race.Zerg, Difficulty.Easy),
+                Computer(Race.Zerg, Difficulty.Hard),
             ],
             # Set realtime=False to run the game as fast as possible.
             # This is standard for bot development and testing.
@@ -19240,23 +19152,23 @@ if __name__ == "__main__":
 ### File: `sajuuk.py`
 
 ```python
-# sajuuk.py
-
 import asyncio
-from typing import Callable, Coroutine, List
+from typing import TYPE_CHECKING
 
 from sc2.bot_ai import BotAI
 from sc2.data import Race
 
+if TYPE_CHECKING:
+    from core.event_bus import EventBus
+
 # Core Services (No changes here)
 from core.global_cache import GlobalCache
-from core.event_bus import EventBus
 from core.game_analysis import GameAnalyzer
 from core.frame_plan import FramePlan
 from core.types import CommandFunctor
-
-# Interfaces and Generals (No changes here)
 from core.interfaces.race_general_abc import RaceGeneral
+from core.utilities.events import Event, EventType, UnitDestroyedPayload
+
 from terran.general.terran_general import TerranGeneral
 
 # ... other generals
@@ -19271,7 +19183,7 @@ class Sajuuk(BotAI):
         """(Initialization is the same)"""
         super().__init__()
         self.global_cache: GlobalCache = GlobalCache()
-        self.event_bus: EventBus = EventBus()
+        self.event_bus: "EventBus" = self.global_cache.event_bus
         self.game_analyzer: GameAnalyzer = GameAnalyzer()
         self.active_general: RaceGeneral | None = None
 
@@ -19285,6 +19197,17 @@ class Sajuuk(BotAI):
         if self.active_general:
             await self.active_general.on_start()
 
+    async def on_unit_destroyed(self, unit_tag: int):
+        unit = self._all_units_previous_map[unit_tag]
+        unit_type = unit.type_id
+        last_known_position = unit.position
+        self.event_bus.publish(
+            Event(
+                EventType.UNIT_DESTROYED,
+                UnitDestroyedPayload(unit_tag, unit_type, last_known_position),
+            )
+        )
+
     async def on_step(self, iteration: int):
         # 1. PERCEIVE
         self.global_cache.update(self.state, self)
@@ -19296,8 +19219,8 @@ class Sajuuk(BotAI):
         frame_plan = FramePlan()
 
         # 4. DECIDE
-        command_functors: List[CommandFunctor] = await self.active_general.execute_step(
-            ...
+        command_functors: list[CommandFunctor] = await self.active_general.execute_step(
+            self.global_cache, frame_plan, self.event_bus
         )
 
         # 5. ACT: Execute all collected command functors with intelligent handling.
@@ -19320,105 +19243,6 @@ class Sajuuk(BotAI):
 
         # 6. PROCESS REFLEXES (remains the same)
         await self.event_bus.process_events()
-```
-
----
-
-### File: `scrape_sc2_library.py`
-
-```python
-# scrape_sc2_library.py
-
-import os
-import importlib.util
-from pathlib import Path
-
-# --- Configuration ---
-# The name of the output Markdown file.
-OUTPUT_FILE = "python_sc2_library_context.md"
-
-# A list of the package names to find and scrape from the venv.
-PACKAGES_TO_SCRAPE = ["sc2"]
-
-# Directories to completely ignore during traversal.
-EXCLUDE_DIRS = {"__pycache__"}
-
-# Mapping of file extensions to Markdown language identifiers.
-LANGUAGE_MAP = {".py": "python"}
-
-
-def scrape_library_to_markdown():
-    """
-    Finds installed Python packages in the environment, reads their source code,
-    and compiles it into a single Markdown file for LLM context.
-    """
-    output_path = Path(__file__).parent / OUTPUT_FILE
-
-    with open(output_path, "w", encoding="utf-8") as md_file:
-        md_file.write("# Python-SC2 Library Source Code Context\n\n")
-        print(f"Generating library context file at: {output_path}")
-
-        for package_name in PACKAGES_TO_SCRAPE:
-            print(f"\nAttempting to find and scrape package: '{package_name}'...")
-
-            try:
-                # Use importlib to find the package specification.
-                spec = importlib.util.find_spec(package_name)
-                if spec is None or spec.origin is None:
-                    print(f"  - Could not find package '{package_name}'. Skipping.")
-                    continue
-
-                # The package path is the directory containing its __init__.py file.
-                package_path = Path(spec.origin).parent
-                print(f"  - Found at: {package_path}")
-                md_file.write(f"\n---\n## Package: `{package_name}`\n---\n\n")
-
-            except ImportError:
-                print(
-                    f"  - Could not import package '{package_name}'. Is it installed in your venv?"
-                )
-                continue
-
-            # Walk through the discovered package directory.
-            for dirpath, dirnames, filenames in os.walk(package_path):
-                dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
-
-                for filename in sorted(filenames):
-                    file_path = Path(dirpath) / filename
-
-                    # We only care about Python files for this task.
-                    if file_path.suffix not in LANGUAGE_MAP:
-                        continue
-
-                    content = ""
-                    try:
-                        content = file_path.read_text(encoding="utf-8").strip()
-                    except (UnicodeDecodeError, IOError):
-                        print(
-                            f"  - Skipping unreadable file: {file_path.relative_to(package_path)}"
-                        )
-                        continue
-
-                    if not content:
-                        print(
-                            f"  - Skipping empty file: {file_path.relative_to(package_path)}"
-                        )
-                        continue
-
-                    relative_path = f"{package_name}/{file_path.relative_to(package_path).as_posix()}"
-                    print(f"  - Processing: {relative_path}")
-
-                    md_file.write(f"### File: `{relative_path}`\n\n")
-                    md_file.write(f"```python\n")
-                    md_file.write(content)
-                    md_file.write(f"\n```\n\n")
-
-    print(f"\nSuccessfully created '{OUTPUT_FILE}'.")
-    print("This file contains the source code for the specified libraries.")
-
-
-if __name__ == "__main__":
-    scrape_library_to_markdown()
 ```
 
 ---
@@ -19523,7 +19347,6 @@ class EventBus:
                 if event.event_type in self._subscribers:
                     for handler in self._subscribers[event.event_type]:
                         tasks.append(handler(event))
-
             if tasks:
                 await asyncio.gather(*tasks)
 
@@ -19626,16 +19449,18 @@ from enum import Enum, auto
 from typing import TYPE_CHECKING
 
 import numpy as np
-from sc2.unit import Unit
 
 if TYPE_CHECKING:
     from sc2.bot_ai import BotAI
     from core.global_cache import GlobalCache
 
+from sc2.data import race_townhalls
+
 from core.utilities.geometry import create_threat_map
 from core.utilities.unit_value import calculate_army_value
 from core.utilities.constants import LOW_FREQUENCY_TASK_RATE
-from core.utilities.unit_types import ALL_STRUCTURE_TYPES
+from core.event_bus import EventBus
+from core.utilities.events import Event, EventType
 
 
 class HighFrequencyTask(Enum):
@@ -19663,24 +19488,13 @@ class GameAnalyzer:
 
     def __init__(self):
         """Initializes the task lists for each tier."""
+        self.global_cache: GlobalCache | None = None
+        self.event_bus: EventBus | None = None
         self._high_freq_tasks: list[HighFrequencyTask] = list(HighFrequencyTask)
         self._low_freq_tasks: list[LowFrequencyTask] = list(LowFrequencyTask)
 
         self._high_freq_index: int = 0
         self._low_freq_index: int = 0
-        self.known_enemy_structures: dict[int, Unit] = {}
-
-    def on_enemy_unit_entered_vision(self, unit: Unit):
-        """Adds an enemy structure to our memory dictionary."""
-        if unit.is_enemy and unit.type_id in ALL_STRUCTURE_TYPES:
-            # Add or update the entry using the tag as the key.
-            self.known_enemy_structures[unit.tag] = unit
-
-    def on_unit_destroyed(self, unit_tag: int):
-        """Safely removes a destroyed structure from our memory."""
-        # KEY CHANGE: Use the built-in, safe .pop() method.
-        # If the tag is not in the dictionary, it does nothing and returns None.
-        self.known_enemy_structures.pop(unit_tag, None)
 
     def run_scheduled_tasks(self, cache: "GlobalCache", bot: "BotAI"):
         """
@@ -19688,6 +19502,12 @@ class GameAnalyzer:
 
         This method is called once per frame by the RaceGeneral.
         """
+        if not self.global_cache:
+            self.global_cache = cache
+            self.event_bus = self.global_cache.event_bus
+            self.event_bus.subscribe(
+                EventType.UNIT_DESTROYED, self.handle_unit_destruction
+            )
         # --- Always run one high-frequency task ---
         if self._high_freq_tasks:
             task_to_run = self._high_freq_tasks[self._high_freq_index]
@@ -19711,7 +19531,9 @@ class GameAnalyzer:
     ):
         """Executes a specific high-frequency analysis task."""
         if task == HighFrequencyTask.UPDATE_FRIENDLY_ARMY_VALUE:
-            army_units = bot.units.not_structure.not_worker
+            # Get your mobile army units excluding workers
+            exclude_tags = bot.workers.tags
+            army_units = bot.units.tags_not_in(exclude_tags)
             cache.friendly_army_value = calculate_army_value(army_units, bot.game_data)
         elif task == HighFrequencyTask.UPDATE_ENEMY_ARMY_VALUE:
             cache.enemy_army_value = calculate_army_value(
@@ -19729,16 +19551,27 @@ class GameAnalyzer:
             elif cache.threat_map is None:
                 cache.threat_map = np.zeros(map_size, dtype=np.float32)
         elif task == LowFrequencyTask.UPDATE_AVAILABLE_EXPANSIONS:
-            all_expansion_locations = set(bot.expansion_locations_list)
-            occupied_locations = {th.position for th in bot.townhalls}
-            enemy_occupied_locations = {
-                es.position for es in bot.enemy_structures.townhall
-            }
+            # all_expansion_locations = set(bot.expansion_locations_list)
+            # cache.occupied_locations = {bot.owned_expansions}
+            # enemy_townhall_types = race_townhalls[bot.enemy_race]
+            # cache.enemy_occupied_locations = {
+            #     enemy_townhall.position
+            #     for enemy_townhall in bot.enemy_structures.of_type(enemy_townhall_types)
+            # }
 
-            # Available locations are those that are not occupied by us or the enemy.
-            cache.available_expansion_locations = (
-                all_expansion_locations - occupied_locations - enemy_occupied_locations
-            )
+            # # Available locations are those that are not occupied by us or the enemy.
+            # cache.available_expansion_locations = (
+            #     all_expansion_locations
+            #     - cache.occupied_locations
+            #     - cache.enemy_occupied_locations
+            # )
+            pass
+
+    async def handle_unit_destruction(self, event: Event):
+        self.update_enemy_townhalls()
+
+    async def update_enemy_townhalls():
+        pass
 ```
 
 ---
@@ -19762,6 +19595,7 @@ if TYPE_CHECKING:
     from sc2.game_info import Ramp
     from sc2.position import Point2
 
+from core.event_bus import EventBus
 from core.game_analysis import GameAnalyzer
 from core.utilities.unit_types import WORKER_TYPES, ALL_STRUCTURE_TYPES
 
@@ -19783,6 +19617,7 @@ class GlobalCache:
         self.bot: "BotAI" | None = None
 
         self._analyzer = GameAnalyzer()
+        self.event_bus: EventBus = EventBus()
 
         # --- Game State ---
         self.game_loop: int = 0
@@ -19806,9 +19641,12 @@ class GlobalCache:
         self.enemy_units: "Units" | None = None
         self.enemy_structures: "Units" | None = None
         self.known_enemy_structures: "Units" | None = None
+        self.known_enemy_townhalls: "Units" | None = None
 
         # --- Map Information ---
         self.map_ramps: list["Ramp"] | None = None
+        self.occupied_locations: set[Point2] = set()
+        self.enemy_occupied_locations: set[Point2] = set()
         self.available_expansion_locations: set[Point2] = set()
 
         # --- Analytical Data (Populated by GameAnalyzer) ---
@@ -19877,7 +19715,7 @@ class GlobalCache:
         self.bot = bot_object
 
         # Initialize the internal analyzer.
-        self._analyzer.initialize(bot_object)
+        self._analyzer = GameAnalyzer()
 
         # This data is a bot-level memory, not available on the transient game_state.
         self.map_ramps = self.bot.game_info.map_ramps
@@ -20098,6 +19936,7 @@ from __future__ import annotations
 from enum import Enum, auto
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+from abc import ABC
 
 # This block was missing. It provides the definitions for type hints.
 if TYPE_CHECKING:
@@ -20135,12 +19974,22 @@ class EventType(Enum):
     # Handled by RepairManager.
     TACTICS_UNIT_TOOK_DAMAGE = auto()
 
+    # Published by the main bot loop's on_unit_destroyed hook.
+    # Handled by GameAnalyzer.
+    UNIT_DESTROYED = auto()
+
+
+class Payload(ABC):
+    """An abstract base class for all event payloads."""
+
+    pass
+
 
 # --- Payload Data Structures ---
 
 
 @dataclass
-class BuildRequestPayload:
+class BuildRequestPayload(Payload):
     """Payload for an INFRA_BUILD_REQUEST event."""
 
     item_id: "UnitTypeId"
@@ -20149,7 +19998,7 @@ class BuildRequestPayload:
 
 
 @dataclass
-class BuildRequestFailedPayload:
+class BuildRequestFailedPayload(Payload):
     """Payload for an INFRA_BUILD_REQUEST_FAILED event."""
 
     item_id: "UnitTypeId"
@@ -20157,18 +20006,27 @@ class BuildRequestFailedPayload:
 
 
 @dataclass
-class EnemyTechScoutedPayload:
+class EnemyTechScoutedPayload(Payload):
     """Payload for a TACTICS_ENEMY_TECH_SCOUTED event."""
 
     tech_id: "UnitTypeId"
 
 
 @dataclass
-class UnitTookDamagePayload:
+class UnitTookDamagePayload(Payload):
     """Payload for a TACTICS_UNIT_TOOK_DAMAGE event."""
 
     unit_tag: int
     damage_amount: float
+
+
+@dataclass
+class UnitDestroyedPayload(Payload):
+    """Payload for a UNIT_DESTROYED event."""
+
+    unit_tag: int
+    unit_type: "UnitTypeId"
+    last_known_position: "Point2"
 
 
 # --- The Generic Event Wrapper ---
@@ -20177,11 +20035,23 @@ class UnitTookDamagePayload:
 @dataclass
 class Event:
     """
-    A generic wrapper for all events published to the EventBus.
+    A generic wrapper for an event published to the EventBus.
+
+    Attributes:
+    -----------
+    event_type: EventType
+        The specific type of the event, which determines which subscribers
+        will be notified. This is the primary identifier for the event.
+
+    payload: PayloadT | None
+        The data associated with the event, providing context for what
+        happened. This is typically one of the specific payload dataclasses
+        (e.g., BuildRequestPayload, UnitDestroyedPayload). Its type is
+        linked to the event_type through the generic `PayloadT`.
     """
 
     event_type: EventType
-    payload: object | None = None
+    payload: Payload | None = None
 ```
 
 ---

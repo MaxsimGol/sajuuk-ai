@@ -121,10 +121,7 @@ class GameAnalyzer:
             pass
 
     async def handle_unit_destruction(self, event: Event):
-        # Access the payload data safely
-        unit_tag = event.payload.unit_tag
-        unit_type = event.payload.unit_type
-        print("Unit destruction", unit_type, unit_tag)
+        self.update_enemy_townhalls()
 
     async def update_enemy_townhalls():
         pass
