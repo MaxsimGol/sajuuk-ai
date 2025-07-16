@@ -12,7 +12,8 @@ from sc2.data import race_townhalls
 from core.utilities.geometry import create_threat_map
 from core.utilities.unit_value import calculate_army_value
 from core.utilities.constants import LOW_FREQUENCY_TASK_RATE
-from core.utilities.unit_types import ALL_STRUCTURE_TYPES
+from core.event_bus import EventBus
+from core.utilities.events import Event, EventType
 
 
 class HighFrequencyTask(Enum):
@@ -40,6 +41,8 @@ class GameAnalyzer:
 
     def __init__(self):
         """Initializes the task lists for each tier."""
+        self.global_cache: GlobalCache | None = None
+        self.event_bus: EventBus | None = None
         self._high_freq_tasks: list[HighFrequencyTask] = list(HighFrequencyTask)
         self._low_freq_tasks: list[LowFrequencyTask] = list(LowFrequencyTask)
 
@@ -52,6 +55,12 @@ class GameAnalyzer:
 
         This method is called once per frame by the RaceGeneral.
         """
+        if not self.global_cache:
+            self.global_cache = cache
+            self.event_bus = self.global_cache.event_bus
+            self.event_bus.subscribe(
+                EventType.UNIT_DESTROYED, self.handle_unit_destruction
+            )
         # --- Always run one high-frequency task ---
         if self._high_freq_tasks:
             task_to_run = self._high_freq_tasks[self._high_freq_index]
@@ -95,17 +104,27 @@ class GameAnalyzer:
             elif cache.threat_map is None:
                 cache.threat_map = np.zeros(map_size, dtype=np.float32)
         elif task == LowFrequencyTask.UPDATE_AVAILABLE_EXPANSIONS:
-            all_expansion_locations = set(bot.expansion_locations_list)
-            cache.occupied_locations = {th.position for th in bot.townhalls}
-            enemy_townhall_types = race_townhalls[bot.enemy_race]
-            cache.enemy_occupied_locations = {
-                enemy_townhall.position
-                for enemy_townhall in bot.enemy_structures.of_type(enemy_townhall_types)
-            }
+            # all_expansion_locations = set(bot.expansion_locations_list)
+            # cache.occupied_locations = {bot.owned_expansions}
+            # enemy_townhall_types = race_townhalls[bot.enemy_race]
+            # cache.enemy_occupied_locations = {
+            #     enemy_townhall.position
+            #     for enemy_townhall in bot.enemy_structures.of_type(enemy_townhall_types)
+            # }
 
-            # Available locations are those that are not occupied by us or the enemy.
-            cache.available_expansion_locations = (
-                all_expansion_locations
-                - cache.occupied_locations
-                - cache.enemy_occupied_locations
-            )
+            # # Available locations are those that are not occupied by us or the enemy.
+            # cache.available_expansion_locations = (
+            #     all_expansion_locations
+            #     - cache.occupied_locations
+            #     - cache.enemy_occupied_locations
+            # )
+            pass
+
+    async def handle_unit_destruction(self, event: Event):
+        # Access the payload data safely
+        unit_tag = event.payload.unit_tag
+        unit_type = event.payload.unit_type
+        print("Unit destruction", unit_type, unit_tag)
+
+    async def update_enemy_townhalls():
+        pass

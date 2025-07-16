@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from sc2.game_info import Ramp
     from sc2.position import Point2
 
+from core.event_bus import EventBus
 from core.game_analysis import GameAnalyzer
 from core.utilities.unit_types import WORKER_TYPES, ALL_STRUCTURE_TYPES
 
@@ -35,6 +36,7 @@ class GlobalCache:
         self.bot: "BotAI" | None = None
 
         self._analyzer = GameAnalyzer()
+        self.event_bus: EventBus = EventBus()
 
         # --- Game State ---
         self.game_loop: int = 0
@@ -58,6 +60,7 @@ class GlobalCache:
         self.enemy_units: "Units" | None = None
         self.enemy_structures: "Units" | None = None
         self.known_enemy_structures: "Units" | None = None
+        self.known_enemy_townhalls: "Units" | None = None
 
         # --- Map Information ---
         self.map_ramps: list["Ramp"] | None = None

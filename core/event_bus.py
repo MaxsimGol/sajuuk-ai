@@ -95,7 +95,6 @@ class EventBus:
                 if event.event_type in self._subscribers:
                     for handler in self._subscribers[event.event_type]:
                         tasks.append(handler(event))
-
             if tasks:
                 await asyncio.gather(*tasks)
 

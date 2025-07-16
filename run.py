@@ -25,7 +25,7 @@ def main():
                 Bot(Race.Terran, Sajuuk(), name="Sajuuk"),
                 # Player 2 is a computer opponent with an "Easy" difficulty.
                 # This is ideal for initial testing and build order validation.
-                Computer(Race.Zerg, Difficulty.Easy),
+                Computer(Race.Zerg, Difficulty.Hard),
             ],
             # Set realtime=False to run the game as fast as possible.
             # This is standard for bot development and testing.
