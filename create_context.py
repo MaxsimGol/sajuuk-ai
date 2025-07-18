@@ -15,6 +15,8 @@ EXCLUDE_FILES = {
     ".gitignore",
     "Design Document.md",
     "scrape_sc2_library.py",
+    "generate_structure.py",
+    "files.md",
     OUTPUT_FILE,
 }
 LANGUAGE_MAP = {".py": "python", ".md": "markdown", ".txt": "text", ".json": "json"}

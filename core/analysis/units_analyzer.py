@@ -1,5 +1,3 @@
-# core/analysis/unit_analyzer.py
-
 from typing import TYPE_CHECKING, Dict
 
 from sc2.unit import Unit
@@ -12,7 +10,7 @@ from core.utilities.events import (
     UnitDestroyedPayload,
     EnemyUnitSeenPayload,
 )
-from core.utilities.unit_types import TERRAN_PRODUCTION_TYPES
+from core.utilities.unit_types import TERRAN_PRODUCTION_TYPES, WORKER_TYPES
 
 if TYPE_CHECKING:
     from sc2.bot_ai import BotAI
@@ -26,8 +24,8 @@ class UnitsAnalyzer(AnalysisTask):
     known enemy units, including snapshots in the fog of war.
     """
 
-    def __init__(self, event_bus: "EventBus"):
-        super().__init__(event_bus)
+    def __init__(self):
+        super().__init__()
         self._known_enemy_units: Dict[int, Unit] = {}
 
     def subscribe_to_events(self, event_bus: "EventBus"):
@@ -45,17 +43,23 @@ class UnitsAnalyzer(AnalysisTask):
         all_friendly_units = bot.units
 
         analyzer.friendly_units = all_friendly_units
-        analyzer.friendly_structures = all_friendly_units.structure
-        analyzer.friendly_workers = all_friendly_units.worker
+        analyzer.friendly_structures = all_friendly_units.filter(
+            lambda u: u.is_structure
+        )
+        analyzer.friendly_workers = all_friendly_units.filter(
+            lambda u: u.type_id in WORKER_TYPES
+        )
 
         analyzer.friendly_army_units = all_friendly_units.filter(
-            lambda u: not u.is_structure and not u.is_worker
+            lambda u: not u.is_structure and not u.type_id in WORKER_TYPES
         )
         analyzer.idle_production_structures = analyzer.friendly_structures.of_type(
             TERRAN_PRODUCTION_TYPES
         ).idle
         analyzer.known_enemy_units = Units(self._known_enemy_units.values(), bot)
-        analyzer.known_enemy_structures = analyzer.known_enemy_units.structure
+        analyzer.known_enemy_structures = analyzer.known_enemy_units.filter(
+            lambda u: u.is_structure
+        )
 
     async def handle_enemy_unit_seen(self, event: Event):
         """Adds or updates a unit in our persistent memory when it enters vision."""

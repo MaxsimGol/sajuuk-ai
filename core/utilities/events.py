@@ -8,6 +8,7 @@ from abc import ABC
 if TYPE_CHECKING:
     from sc2.ids.unit_typeid import UnitTypeId
     from sc2.position import Point2
+    from sc2.unit import Unit
 
 
 class EventType(Enum):
@@ -39,6 +40,10 @@ class EventType(Enum):
     # Published by the main bot loop's on_unit_took_damage hook.
     # Handled by RepairManager.
     TACTICS_UNIT_TOOK_DAMAGE = auto()
+
+    # Published by the main bot's on_enemy_unit_entered_vision hook.
+    # Handled by GameAnalyzer.
+    TACTICS_ENEMY_UNIT_SEEN = auto()
 
     # Published by the main bot loop's on_unit_destroyed hook.
     # Handled by GameAnalyzer.
@@ -93,6 +98,13 @@ class UnitDestroyedPayload(Payload):
     unit_tag: int
     unit_type: "UnitTypeId"
     last_known_position: "Point2"
+
+
+@dataclass
+class EnemyUnitSeenPayload(Payload):
+    """Payload for a TACTICS_ENEMY_UNIT_SEEN event."""
+
+    unit: "Unit"
 
 
 # --- The Generic Event Wrapper ---

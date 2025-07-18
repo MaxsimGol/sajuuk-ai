@@ -59,14 +59,19 @@ class GameAnalyzer:
     def _instantiate_tasks(
         self, task_classes: List[type[AnalysisTask]], event_bus: EventBus
     ) -> List[AnalysisTask]:
-        """Factory helper to instantiate tasks, injecting dependencies as needed."""
+        """
+        Factory helper to instantiate tasks and wire up event subscriptions
+        for those that require it.
+        """
         tasks = []
         for TaskCls in task_classes:
-            sig = inspect.signature(TaskCls.__init__)
-            if "event_bus" in sig.parameters:
-                tasks.append(TaskCls(event_bus=event_bus))
-            else:
-                tasks.append(TaskCls())
+            task = TaskCls()
+            # If the task has a subscription method, call it.
+            if hasattr(task, "subscribe_to_events"):
+                subscribe_method = getattr(task, "subscribe_to_events")
+                if callable(subscribe_method):
+                    subscribe_method(event_bus)
+            tasks.append(task)
         return tasks
 
     def run(self, bot: "BotAI"):

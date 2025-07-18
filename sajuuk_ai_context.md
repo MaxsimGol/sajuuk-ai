@@ -266,171 +266,154 @@ This subdirectory contains the complex, real-time logic for controlling specific
 
 ---
 
-### File: `files.md`
+### File: `project_structure.md`
 
 ```markdown
-sajuuk_ai/
-├── run.py                          # Main entry point to launch a game with the Sajuuk bot.
-├── run_tests.py                    # Discovers and runs all unit and integration tests.
-├── sajuuk.py                       # The Main BotAI Conductor.
-├── requirements.txt                # Lists all Python project dependencies (burnysc2, numpy, etc.).
-└── README.md                       # Project overview, setup instructions, and contribution guidelines.
+### Project File Structure
 
-#=============================================================================#
-#   CORE: Shared, Race-Agnostic Components & Architectural Blueprints
-#=============================================================================#
-├── core/
+```
+.
+├── core
 │   ├── __init__.py
-│   │
-│   ├── interfaces/
+│   ├── analysis
+│   │   ├── analysis_configuration.py
+│   │   ├── army_value_analyzer.py
+│   │   ├── expansion_analyzer.py
+│   │   ├── known_enemy_townhall_analyzer.py
+│   │   ├── threat_map_analyzer.py
+│   │   └── units_analyzer.py
+│   ├── event_bus.py
+│   ├── frame_plan.py
+│   ├── game_analysis.py
+│   ├── global_cache.py
+│   ├── interfaces
 │   │   ├── __init__.py
-│   │   ├── race_general_abc.py     # Contract for top-level Race Generals.
-│   │   ├── director_abc.py         # Contract for high-level functional Directors.
-│   │   └── manager_abc.py          # Contract for specialized, stateful Managers.
-│   │
-│   ├── global_cache.py             # READ-ONLY memory of the world state (updated once by Sajuuk).
-│   ├── event_bus.py                # Nervous system for instant reflexes. Manages namespaced event channels.
-│   ├── frame_plan.py               # Ephemeral "scratchpad" for the current frame's strategic intentions.
-│   │
-│   └── utilities/
+│   │   ├── analysis_task_abc.py
+│   │   ├── director_abc.py
+│   │   ├── manager_abc.py
+│   │   └── race_general_abc.py
+│   ├── types.py
+│   └── utilities
 │       ├── __init__.py
-│       ├── events.py               # NEW: Central registry defining all event types and their payload schemas.
-│       ├── geometry.py             # Shared math for positioning, kiting, and distance calculations.
-│       ├── unit_value.py           # Functions to assess unit threat and army value.
-│       └── constants.py            # Bot-specific constants (e.g., HARASS_SQUAD_SIZE).
-
-#=============================================================================#
-#   RACE-SPECIFIC MODULES: TERRAN (Detailed Hybrid Structure)
-#=============================================================================#
-├── terran/
+│       ├── constants.py
+│       ├── events.py
+│       ├── geometry.py
+│       ├── unit_types.py
+│       └── unit_value.py
+├── create_context.py
+├── Design Document.md
+├── Files description.md
+├── files.md
+├── protoss
+│   └── __init__.py
+├── python_sc2_library_context.md
+├── README.md
+├── requirements.txt
+├── run.py
+├── run_tests.py
+├── Sajuuk-vs-EasyZerg.SC2Replay
+├── sajuuk.py
+├── scrape_sc2_library.py
+├── terran
 │   ├── __init__.py
-│   │
-│   ├── general/
-│   │   └── terran_general.py       # Top-level orchestrator. Creates FramePlan, manages Directors.
-│   │
-│   ├── infrastructure/
-│   │   # RESPONSIBILITY: Build and maintain the bot's economic engine.
+│   ├── capabilities
 │   │   ├── __init__.py
-│   │   ├── infrastructure_director.py    # Sets economic stance, WRITES resource budget to FramePlan.
-│   │   │
-│   │   ├── units/
+│   │   ├── capability_director.py
+│   │   ├── structures
 │   │   │   ├── __init__.py
-│   │   │   ├── scv_manager.py          # Manages SCV production goals and mineral/gas saturation.
-│   │   │   └── mule_manager.py         # Manages MULE calls on Orbitals.
-│   │   │
-│   │   └── structures/
+│   │   │   ├── addon_manager.py
+│   │   │   └── tech_structure_manager.py
+│   │   ├── units
+│   │   │   ├── __init__.py
+│   │   │   └── army_unit_manager.py
+│   │   └── upgrades
 │   │       ├── __init__.py
-│   │       ├── supply_manager.py       # Manages building Supply Depots to prevent blocks.
-│   │       ├── expansion_manager.py    # Decides WHEN and WHERE to expand, publishes BuildRequest.
-│   │       ├── repair_manager.py       # Subscribes to damage events, manages SCV repair tasks.
-│   │       └── construction_manager.py   # Specialist service: Subscribes to ALL BuildRequests and executes them.
-│   │
-│   ├── capabilities/
-│   │   # RESPONSIBILITY: Spend resources to create army power and new tech options.
+│   │       └── research_manager.py
+│   ├── general
 │   │   ├── __init__.py
-│   │   ├── capability_director.py      # READS budget from FramePlan, sets production goals for managers.
-│   │   │
-│   │   ├── units/
+│   │   └── terran_general.py
+│   ├── infrastructure
+│   │   ├── __init__.py
+│   │   ├── infrastructure_director.py
+│   │   ├── structures
 │   │   │   ├── __init__.py
-│   │   │   └── army_unit_manager.py    # Manages training queues for ALL army units.
-│   │   │
-│   │   ├── structures/
-│   │   │   ├── __init__.py
-│   │   │   ├── tech_structure_manager.py # Manages building Factories, Starports, etc. Publishes BuildRequest.
-│   │   │   └── addon_manager.py          # Manages building Reactors and Tech Labs. Publishes BuildRequest.
-│   │   │
-│   │   └── upgrades/
+│   │   │   ├── construction_manager.py
+│   │   │   ├── expansion_manager.py
+│   │   │   ├── repair_manager.py
+│   │   │   └── supply_manager.py
+│   │   └── units
 │   │       ├── __init__.py
-│   │       └── research_manager.py     # Manages ALL research queues (Stim, Shields, etc.).
-│   │
-│   ├── tactics/
-│   │   # RESPONSIBILITY: Information gathering and battlefield control.
+│   │       ├── mule_manager.py
+│   │       └── scv_manager.py
+│   ├── specialists
 │   │   ├── __init__.py
-│   │   ├── tactical_director.py          # Sets army stance (Attack, Defend) in FramePlan.
-│   │   │
-│   │   ├── scouting_manager.py           # Controls scout units and publishes intel to the EventBus.
-│   │   ├── army_control_manager.py       # Composes squads and gives them high-level orders.
-│   │   └── positioning_manager.py        # Calculates optimal defensive positions and rally points.
-│   │
-│   └── specialists/
-│       # RESPONSIBILITY: Single-purpose, low-level execution logic ("tools").
+│   │   ├── build_orders
+│   │   │   ├── __init__.py
+│   │   │   └── two_rax_reaper.py
+│   │   └── micro
+│   │       ├── __init__.py
+│   │       ├── marine_controller.py
+│   │       ├── medivac_controller.py
+│   │       └── tank_controller.py
+│   └── tactics
 │       ├── __init__.py
-│       │
-│       ├── build_orders/
+│       ├── army_control_manager.py
+│       ├── positioning_manager.py
+│       ├── scouting_manager.py
+│       └── tactical_director.py
+├── tests
+│   ├── __init__.py
+│   ├── test_core
+│   │   ├── __init__.py
+│   │   ├── test_event_bus.py
+│   │   ├── test_frame_plan.py
+│   │   ├── test_game_analysis.py
+│   │   └── test_global_cache.py
+│   └── test_terran
+│       ├── __init__.py
+│       ├── test_capabilities
 │       │   ├── __init__.py
-│       │   └── two_rax_reaper.py       # Example starting build order.
-│       │
-│       └── micro/
+│       │   ├── test_capability_director.py
+│       │   ├── test_structures
+│       │   │   ├── __init__.py
+│       │   │   ├── test_addon_manager.py
+│       │   │   └── test_tech_structure_manager.py
+│       │   ├── test_units
+│       │   │   ├── __init__.py
+│       │   │   └── test_army_unit_manager.py
+│       │   └── test_upgrades
+│       │       ├── __init__.py
+│       │       └── test_research_manager.py
+│       ├── test_general
+│       │   ├── __init__.py
+│       │   └── test_terran_general.py
+│       ├── test_infrastructure
+│       │   ├── __init__.py
+│       │   ├── test_infrastructure_director.py
+│       │   ├── test_structures
+│       │   │   ├── __init__.py
+│       │   │   ├── test_construction_manager.py
+│       │   │   ├── test_expansion_manager.py
+│       │   │   ├── test_repair_manager.py
+│       │   │   └── test_supply_manager.py
+│       │   └── test_units
+│       │       ├── __init__.py
+│       │       ├── test_mule_manager.py
+│       │       └── test_scv_manager.py
+│       ├── test_specialists
+│       │   ├── __init__.py
+│       │   └── test_micro
+│       │       ├── __init__.py
+│       │       └── test_marine_controller.py
+│       └── test_tactics
 │           ├── __init__.py
-│           ├── marine_controller.py    # Handles stutter-step micro for a squad of marines.
-│           ├── tank_controller.py      # Handles siege/unsiege logic for a squad of tanks.
-│           └── medivac_controller.py   # Handles healing and boosting for a squad of medivacs.
-
-#=============================================================================#
-#   RACE-SPECIFIC MODULES: ZERG & PROTOSS (High-Level Placeholders)
-#=============================================================================#
-├── zerg/
-│   └── __init__.py # ... (Structure will mirror terran/ with race-specific components)
-│
-├── protoss/
-│   └── __init__.py # ... (Structure will mirror terran/ with race-specific components)
-
-#=============================================================================#
-#   TESTS: Mirroring the Project Structure for Comprehensive Coverage
-#=============================================================================#
-└── tests/
-    ├── __init__.py
-    ├── test_core/
-    │   ├── __init__.py
-    │   ├── test_global_cache.py
-    │   ├── test_event_bus.py
-    │   └── test_frame_plan.py
-    │
-    └── test_terran/
-        ├── __init__.py
-        │
-        ├── test_general/
-        │   └── test_terran_general.py
-        │
-        ├── test_infrastructure/
-        │   ├── __init__.py
-        │   ├── test_infrastructure_director.py
-        │   ├── test_units/
-        │   │   ├── __init__.py
-        │   │   ├── test_scv_manager.py
-        │   │   └── test_mule_manager.py
-        │   └── test_structures/
-        │       ├── __init__.py
-        │       ├── test_supply_manager.py
-        │       ├── test_expansion_manager.py
-        │       ├── test_repair_manager.py
-        │       └── test_construction_manager.py
-        │
-        ├── test_capabilities/
-        │   ├── __init__.py
-        │   ├── test_capability_director.py
-        │   ├── test_units/
-        │   │   ├── __init__.py
-        │   │   └── test_army_unit_manager.py
-        │   ├── test_structures/
-        │   │   ├── __init__.py
-        │   │   ├── test_tech_structure_manager.py
-        │   │   └── test_addon_manager.py
-        │   └── test_upgrades/
-        │       ├── __init__.py
-        │       └── test_research_manager.py
-        │
-        ├── test_tactics/
-        │   ├── __init__.py
-        │   ├── test_tactical_director.py
-        │   ├── test_scouting_manager.py
-        │   ├── test_army_control_manager.py
-        │   └── test_positioning_manager.py
-        │
-        └── test_specialists/
-            └── test_micro/
-                ├── __init__.py
-                └── test_marine_controller.py
+│           ├── test_army_control_manager.py
+│           ├── test_positioning_manager.py
+│           ├── test_scouting_manager.py
+│           └── test_tactical_director.py
+└── zerg
+    └── __init__.py
+```
 ```
 
 ---
@@ -19152,96 +19135,96 @@ if __name__ == "__main__":
 ### File: `sajuuk.py`
 
 ```python
+# sajuuk.py
+
 import asyncio
 from typing import TYPE_CHECKING
 
 from sc2.bot_ai import BotAI
 from sc2.data import Race
+from sc2.unit import Unit
 
-if TYPE_CHECKING:
-    from core.event_bus import EventBus
-
-# Core Services (No changes here)
 from core.global_cache import GlobalCache
 from core.game_analysis import GameAnalyzer
 from core.frame_plan import FramePlan
 from core.types import CommandFunctor
 from core.interfaces.race_general_abc import RaceGeneral
-from core.utilities.events import Event, EventType, UnitDestroyedPayload
-
+from core.utilities.events import (
+    Event,
+    EventType,
+    UnitDestroyedPayload,
+    EnemyUnitSeenPayload,
+)
 from terran.general.terran_general import TerranGeneral
 
-# ... other generals
+if TYPE_CHECKING:
+    from core.event_bus import EventBus
 
 
 class Sajuuk(BotAI):
-    """
-    The Conductor. (Documentation remains the same)
-    """
+    """The Conductor. Orchestrates the main Perceive-Analyze-Plan-Act loop."""
 
     def __init__(self):
-        """(Initialization is the same)"""
         super().__init__()
-        self.global_cache: GlobalCache = GlobalCache()
+        self.global_cache = GlobalCache()
         self.event_bus: "EventBus" = self.global_cache.event_bus
-        self.game_analyzer: GameAnalyzer = GameAnalyzer()
+        self.game_analyzer = GameAnalyzer(self.event_bus)
         self.active_general: RaceGeneral | None = None
 
     async def on_start(self):
-        """(on_start is the same)"""
         if self.race == Race.Terran:
             self.active_general = TerranGeneral(self)
         else:
             raise NotImplementedError(f"Sajuuk does not support race: {self.race}")
-
         if self.active_general:
             await self.active_general.on_start()
 
+    async def on_enemy_unit_entered_vision(self, unit: Unit):
+        self.event_bus.publish(
+            Event(EventType.TACTICS_ENEMY_UNIT_SEEN, EnemyUnitSeenPayload(unit))
+        )
+
     async def on_unit_destroyed(self, unit_tag: int):
-        unit = self._all_units_previous_map[unit_tag]
-        unit_type = unit.type_id
-        last_known_position = unit.position
+        unit = self._all_units_previous_map.get(unit_tag)
+        if not unit:
+            return
         self.event_bus.publish(
             Event(
                 EventType.UNIT_DESTROYED,
-                UnitDestroyedPayload(unit_tag, unit_type, last_known_position),
+                UnitDestroyedPayload(unit.tag, unit.type_id, unit.position),
             )
         )
 
     async def on_step(self, iteration: int):
-        # 1. PERCEIVE
-        self.global_cache.update(self.state, self)
+        # 1. ANALYZE: Run the full analysis pipeline. The analyzer reads raw
+        # state from 'self' (the bot object) and updates its own attributes.
+        self.game_analyzer.run(self)
 
-        # 2. ANALYZE
-        self.game_analyzer.run_scheduled_tasks(self.global_cache, self)
+        # 2. CACHE: Populate the GlobalCache with a consistent snapshot for this frame,
+        # combining raw state with the now-complete analysis.
+        self.global_cache.update(self, self.game_analyzer)
 
-        # 3. PLAN
+        # 3. PLAN: Create a fresh "scratchpad" for this frame's intentions.
         frame_plan = FramePlan()
 
-        # 4. DECIDE
+        # 4. DECIDE: The race-specific General orchestrates its Directors, which
+        # read from the GlobalCache and write their decisions to the FramePlan.
         command_functors: list[CommandFunctor] = await self.active_general.execute_step(
             self.global_cache, frame_plan, self.event_bus
         )
 
-        # 5. ACT: Execute all collected command functors with intelligent handling.
+        # 5. ACT: Execute all collected commands.
         if command_functors:
-            # This is the new, more robust execution logic.
-            # We separate the synchronous from the asynchronous functors.
-            async_tasks = []
-            for func in command_functors:
-                result = func()
-                # If the result is a coroutine, it's an async action.
-                # We add it to our list of tasks to be gathered.
-                if asyncio.iscoroutine(result):
-                    async_tasks.append(result)
-                # If the result is not a coroutine, it was a synchronous action
-                # that has already completed. We do nothing further.
-
-            # We then await all the async tasks concurrently.
+            async_tasks = [
+                func() for func in command_functors if asyncio.iscoroutine(func())
+            ]
+            sync_actions = [
+                func() for func in command_functors if not asyncio.iscoroutine(func())
+            ]  # For immediate effect actions
             if async_tasks:
                 await asyncio.gather(*async_tasks)
 
-        # 6. PROCESS REFLEXES (remains the same)
+        # 6. PROCESS REFLEXES: Handle all events queued during the frame.
         await self.event_bus.process_events()
 ```
 
@@ -19445,133 +19428,100 @@ class FramePlan:
 ### File: `core/game_analysis.py`
 
 ```python
-from enum import Enum, auto
-from typing import TYPE_CHECKING
+# core/game_analysis.py
 
+from typing import TYPE_CHECKING, List
 import numpy as np
+import inspect
+
+from sc2.units import Units
+
+from core.interfaces.analysis_task_abc import AnalysisTask
+from core.event_bus import EventBus
+from core.utilities.constants import LOW_FREQUENCY_TASK_RATE
+from core.analysis.analysis_configuration import (
+    HIGH_FREQUENCY_TASK_CLASSES,
+    LOW_FREQUENCY_TASK_CLASSES,
+    PRE_ANALYSIS_TASK_CLASSES,
+)
 
 if TYPE_CHECKING:
     from sc2.bot_ai import BotAI
-    from core.global_cache import GlobalCache
-
-from sc2.data import race_townhalls
-
-from core.utilities.geometry import create_threat_map
-from core.utilities.unit_value import calculate_army_value
-from core.utilities.constants import LOW_FREQUENCY_TASK_RATE
-from core.event_bus import EventBus
-from core.utilities.events import Event, EventType
-
-
-class HighFrequencyTask(Enum):
-    """Defines lightweight tasks that can run in a fast round-robin cycle."""
-
-    UPDATE_FRIENDLY_ARMY_VALUE = auto()
-    UPDATE_ENEMY_ARMY_VALUE = auto()
-
-
-class LowFrequencyTask(Enum):
-    """Defines heavyweight tasks that run on a slower, periodic cycle."""
-
-    UPDATE_THREAT_MAP = auto()
-    UPDATE_AVAILABLE_EXPANSIONS = auto()
+    from sc2.position import Point2
 
 
 class GameAnalyzer:
     """
-    An active component that performs scheduled analysis using a tiered approach.
-
-    High-frequency tasks (like army value) are cycled through on every frame.
-    Low-frequency tasks (like threat maps) are executed only once every N frames
-    to ensure smooth performance.
+    The central analysis engine. Owns analytical state and runs a staged,
+    scheduled pipeline of tasks to ensure data dependencies and performance.
     """
 
-    def __init__(self):
-        """Initializes the task lists for each tier."""
-        self.global_cache: GlobalCache | None = None
-        self.event_bus: EventBus | None = None
-        self._high_freq_tasks: list[HighFrequencyTask] = list(HighFrequencyTask)
-        self._low_freq_tasks: list[LowFrequencyTask] = list(LowFrequencyTask)
+    def __init__(self, event_bus: EventBus):
+        # --- Analytical State Attributes ---
+        self.friendly_army_value: int = 0
+        self.enemy_army_value: int = 0
+        self.friendly_units: Units | None = None
+        self.friendly_structures: Units | None = None
+        self.friendly_workers: Units | None = None
+        self.friendly_army_units: Units | None = None
+        self.idle_production_structures: Units | None = None
+        self.threat_map: np.ndarray | None = None
+        self.known_enemy_units: Units | None = None
+        self.known_enemy_structures: Units | None = None
+        self.known_enemy_townhalls: Units | None = None
+        self.available_expansion_locations: set[Point2] = set()
+        self.occupied_locations: set[Point2] = set()
+        self.enemy_occupied_locations: set[Point2] = set()
 
+        # --- Task Pipeline and Scheduler ---
+        self._pre_analysis_tasks: List[AnalysisTask] = self._instantiate_tasks(
+            PRE_ANALYSIS_TASK_CLASSES, event_bus
+        )
+        self._high_freq_tasks: List[AnalysisTask] = self._instantiate_tasks(
+            HIGH_FREQUENCY_TASK_CLASSES, event_bus
+        )
+        self._low_freq_tasks: List[AnalysisTask] = self._instantiate_tasks(
+            LOW_FREQUENCY_TASK_CLASSES, event_bus
+        )
         self._high_freq_index: int = 0
         self._low_freq_index: int = 0
 
-    def run_scheduled_tasks(self, cache: "GlobalCache", bot: "BotAI"):
-        """
-        Executes the next scheduled tasks based on the tiered schedule.
+    def _instantiate_tasks(
+        self, task_classes: List[type[AnalysisTask]], event_bus: EventBus
+    ) -> List[AnalysisTask]:
+        """Factory helper to instantiate tasks, injecting dependencies as needed."""
+        tasks = []
+        for TaskCls in task_classes:
+            sig = inspect.signature(TaskCls.__init__)
+            if "event_bus" in sig.parameters:
+                tasks.append(TaskCls(event_bus=event_bus))
+            else:
+                tasks.append(TaskCls())
+        return tasks
 
-        This method is called once per frame by the RaceGeneral.
-        """
-        if not self.global_cache:
-            self.global_cache = cache
-            self.event_bus = self.global_cache.event_bus
-            self.event_bus.subscribe(
-                EventType.UNIT_DESTROYED, self.handle_unit_destruction
-            )
-        # --- Always run one high-frequency task ---
+    def run(self, bot: "BotAI"):
+        """Executes the full analysis pipeline for the current game frame."""
+        # STAGE 1: Pre-Analysis (every frame, guaranteed order)
+        for task in self._pre_analysis_tasks:
+            task.execute(self, bot)
+
+        # STAGE 2: Scheduled High-Frequency Analysis (round-robin)
         if self._high_freq_tasks:
             task_to_run = self._high_freq_tasks[self._high_freq_index]
-            self._execute_high_frequency_task(task_to_run, cache, bot)
+            task_to_run.execute(self, bot)
             self._high_freq_index = (self._high_freq_index + 1) % len(
                 self._high_freq_tasks
             )
 
-        # --- Only run one low-frequency task periodically ---
+        # STAGE 3: Scheduled Low-Frequency Analysis (periodic)
         if self._low_freq_tasks and (
             bot.state.game_loop % LOW_FREQUENCY_TASK_RATE == 0
         ):
             task_to_run = self._low_freq_tasks[self._low_freq_index]
-            self._execute_low_frequency_task(task_to_run, cache, bot)
+            task_to_run.execute(self, bot)
             self._low_freq_index = (self._low_freq_index + 1) % len(
                 self._low_freq_tasks
             )
-
-    def _execute_high_frequency_task(
-        self, task: HighFrequencyTask, cache: "GlobalCache", bot: "BotAI"
-    ):
-        """Executes a specific high-frequency analysis task."""
-        if task == HighFrequencyTask.UPDATE_FRIENDLY_ARMY_VALUE:
-            # Get your mobile army units excluding workers
-            exclude_tags = bot.workers.tags
-            army_units = bot.units.tags_not_in(exclude_tags)
-            cache.friendly_army_value = calculate_army_value(army_units, bot.game_data)
-        elif task == HighFrequencyTask.UPDATE_ENEMY_ARMY_VALUE:
-            cache.enemy_army_value = calculate_army_value(
-                bot.enemy_units, bot.game_data
-            )
-
-    def _execute_low_frequency_task(
-        self, task: LowFrequencyTask, cache: "GlobalCache", bot: "BotAI"
-    ):
-        """Executes a specific low-frequency analysis task."""
-        if task == LowFrequencyTask.UPDATE_THREAT_MAP:
-            map_size = bot.game_info.map_size
-            if bot.enemy_units.exists:
-                cache.threat_map = create_threat_map(bot.enemy_units, map_size)
-            elif cache.threat_map is None:
-                cache.threat_map = np.zeros(map_size, dtype=np.float32)
-        elif task == LowFrequencyTask.UPDATE_AVAILABLE_EXPANSIONS:
-            # all_expansion_locations = set(bot.expansion_locations_list)
-            # cache.occupied_locations = {bot.owned_expansions}
-            # enemy_townhall_types = race_townhalls[bot.enemy_race]
-            # cache.enemy_occupied_locations = {
-            #     enemy_townhall.position
-            #     for enemy_townhall in bot.enemy_structures.of_type(enemy_townhall_types)
-            # }
-
-            # # Available locations are those that are not occupied by us or the enemy.
-            # cache.available_expansion_locations = (
-            #     all_expansion_locations
-            #     - cache.occupied_locations
-            #     - cache.enemy_occupied_locations
-            # )
-            pass
-
-    async def handle_unit_destruction(self, event: Event):
-        self.update_enemy_townhalls()
-
-    async def update_enemy_townhalls():
-        pass
 ```
 
 ---
@@ -19583,142 +19533,90 @@ class GameAnalyzer:
 
 from __future__ import annotations
 from typing import TYPE_CHECKING
-
 import numpy as np
 from sc2.ids.upgrade_id import UpgradeId
 from sc2.ids.unit_typeid import UnitTypeId
+from sc2.units import Units
 
 if TYPE_CHECKING:
     from sc2.bot_ai import BotAI
-    from sc2.game_state import GameState
-    from sc2.units import Units
     from sc2.game_info import Ramp
     from sc2.position import Point2
+    from core.game_analysis import GameAnalyzer
 
 from core.event_bus import EventBus
-from core.game_analysis import GameAnalyzer
-from core.utilities.unit_types import WORKER_TYPES, ALL_STRUCTURE_TYPES
 
 
 class GlobalCache:
     """
     A passive data container for the bot's "world state" on a single frame.
-
-    This class is the definitive, read-only source of truth for all other
-    components during a game step. It is intentionally "dumb" and contains
-    no complex logic. Its attributes are populated by two external sources:
-    1.  High-frequency data is populated by this class's own `update` method.
-    2.  Low-frequency, expensive analysis (like threat maps) is calculated by
-        the `GameAnalyzer` and written into this cache's attributes.
+    It is populated once per frame by the Sajuuk conductor.
     """
 
     def __init__(self):
-        # --- Bot Object Reference ---
-        self.bot: "BotAI" | None = None
-
-        self._analyzer = GameAnalyzer()
         self.event_bus: EventBus = EventBus()
 
-        # --- Game State ---
+        # Raw Perceived State
+        self.bot: "BotAI" | None = None
         self.game_loop: int = 0
-
-        # --- Core Resources ---
         self.minerals: int = 0
         self.vespene: int = 0
         self.supply_left: int = 0
         self.supply_cap: int = 0
         self.supply_used: int = 0
-
-        # --- Friendly State ---
-        self.friendly_units: "Units" | None = None
-        self.friendly_structures: "Units" | None = None
-        self.friendly_workers: "Units" | None = None
-        self.friendly_army_units: "Units" | None = None
-        self.idle_production_structures: "Units" | None = None
         self.friendly_upgrades: set["UpgradeId"] | None = None
-
-        # --- Enemy State ---
         self.enemy_units: "Units" | None = None
         self.enemy_structures: "Units" | None = None
-        self.known_enemy_structures: "Units" | None = None
-        self.known_enemy_townhalls: "Units" | None = None
-
-        # --- Map Information ---
         self.map_ramps: list["Ramp"] | None = None
-        self.occupied_locations: set[Point2] = set()
-        self.enemy_occupied_locations: set[Point2] = set()
-        self.available_expansion_locations: set[Point2] = set()
 
-        # --- Analytical Data (Populated by GameAnalyzer) ---
+        # Analyzed State (Copied from GameAnalyzer)
+        self.friendly_units: Units | None = None
+        self.friendly_structures: Units | None = None
+        self.friendly_workers: Units | None = None
+        self.friendly_army_units: Units | None = None
+        self.idle_production_structures: Units | None = None
         self.threat_map: np.ndarray | None = None
         self.friendly_army_value: int = 0
         self.enemy_army_value: int = 0
+        self.known_enemy_units: Units | None = None
+        self.known_enemy_structures: Units | None = None
+        self.known_enemy_townhalls: Units | None = None
+        self.available_expansion_locations: set[Point2] = set()
+        self.occupied_locations: set[Point2] = set()
+        self.enemy_occupied_locations: set[Point2] = set()
 
-    def update(self, game_state: "GameState", bot_object: "BotAI"):
-        """
-        Populates the cache with high-frequency, low-cost data from the
-        current game state.
-        """
+    def update(self, bot: "BotAI", analyzer: "GameAnalyzer"):
+        """Populates the cache from the raw bot state and the GameAnalyzer."""
         if self.bot is None:
-            self._initialize_first_time(bot_object)
-        self.game_loop = game_state.game_loop
-
-        self._update_common_state(game_state)
-        self._update_unit_collections(bot_object)
-
-    def _update_common_state(self, game_state: "GameState"):
-        """Updates simple, high-frequency state attributes from the game_state."""
-        self.minerals = game_state.common.minerals
-        self.vespene = game_state.common.vespene
-        self.supply_used = game_state.common.food_used
-        self.supply_cap = game_state.common.food_cap
-        self.supply_left = self.supply_cap - self.supply_used
-        self.friendly_upgrades = game_state.upgrades
-
-        # Static map info is populated only once at the start of the game.
-        if self.game_loop == 0:
+            self.bot = bot
             self.map_ramps = self.bot.game_info.map_ramps
 
-    def _update_unit_collections(self, bot_object: "BotAI"):
-        """Updates and filters all friendly and enemy unit collections."""
-        all_friendly_units = bot_object.units
-        self.friendly_units = all_friendly_units
-        self.friendly_structures = all_friendly_units.filter(
-            lambda unit: unit.type_id in ALL_STRUCTURE_TYPES
-        )
-        self.friendly_workers = all_friendly_units.filter(
-            lambda unit: unit.type_id in WORKER_TYPES
-        )
-        self.friendly_army_units = all_friendly_units.filter(
-            lambda unit: unit.type_id not in ALL_STRUCTURE_TYPES
-            and unit.type_id not in WORKER_TYPES
-        )
+        # --- Copy Raw Perceived State ---
+        self.game_loop = bot.state.game_loop
+        self.minerals = bot.minerals
+        self.vespene = bot.vespene
+        self.supply_used = bot.supply_used
+        self.supply_cap = bot.supply_cap
+        self.supply_left = bot.supply_left
+        self.friendly_upgrades = bot.state.upgrades
+        self.enemy_units = bot.enemy_units
+        self.enemy_structures = bot.enemy_structures
 
-        self.enemy_units = bot_object.enemy_units
-        self.enemy_structures = bot_object.enemy_structures
-
-        # Filter for idle production structures.
-        production_types = {
-            UnitTypeId.BARRACKS,
-            UnitTypeId.FACTORY,
-            UnitTypeId.STARPORT,
-        }
-        self.idle_production_structures = self.friendly_structures.of_type(
-            production_types
-        ).idle
-
-    def _initialize_first_time(self, bot_object: "BotAI"):
-        """
-        Performs all one-time setup tasks for the cache and its subsystems.
-        """
-        # Set the persistent bot reference.
-        self.bot = bot_object
-
-        # Initialize the internal analyzer.
-        self._analyzer = GameAnalyzer()
-
-        # This data is a bot-level memory, not available on the transient game_state.
-        self.map_ramps = self.bot.game_info.map_ramps
+        # --- Copy Final Analyzed State ---
+        self.friendly_units = analyzer.friendly_units
+        self.friendly_structures = analyzer.friendly_structures
+        self.friendly_workers = analyzer.friendly_workers
+        self.friendly_army_units = analyzer.friendly_army_units
+        self.idle_production_structures = analyzer.idle_production_structures
+        self.threat_map = analyzer.threat_map
+        self.friendly_army_value = analyzer.friendly_army_value
+        self.enemy_army_value = analyzer.enemy_army_value
+        self.known_enemy_units = analyzer.known_enemy_units
+        self.known_enemy_structures = analyzer.known_enemy_structures
+        self.known_enemy_townhalls = analyzer.known_enemy_townhalls
+        self.available_expansion_locations = analyzer.available_expansion_locations
+        self.occupied_locations = analyzer.occupied_locations
+        self.enemy_occupied_locations = analyzer.enemy_occupied_locations
 ```
 
 ---
@@ -19731,6 +19629,329 @@ from typing import Callable, Any
 # A CommandFunctor is an async, zero-argument function that returns any result.
 # It encapsulates a deferred action (e.g., lambda: some_unit.train()).
 CommandFunctor = Callable[[], Any]
+```
+
+---
+
+### File: `core/analysis/analysis_configuration.py`
+
+```python
+"""
+A declarative configuration registry for all analysis tasks in the system.
+"""
+
+from __future__ import annotations
+from typing import List, Type
+
+from core.interfaces.analysis_task_abc import AnalysisTask
+from core.analysis.army_value_analyzer import (
+    FriendlyArmyValueAnalyzer,
+    EnemyArmyValueAnalyzer,
+)
+from core.analysis.expansion_analyzer import ExpansionAnalyzer
+from core.analysis.known_enemy_townhall_analyzer import KnownEnemyTownhallAnalyzer
+from core.analysis.threat_map_analyzer import ThreatMapAnalyzer
+from core.analysis.units_analyzer import UnitsAnalyzer
+
+# --- Task Configuration ---
+
+# PRE_ANALYSIS: Run EVERY frame before all other tasks.
+# For foundational tasks that other analyzers depend on.
+PRE_ANALYSIS_TASK_CLASSES: List[Type[AnalysisTask]] = [
+    UnitsAnalyzer,
+]
+
+# HIGH_FREQUENCY: Run one task per frame in a round-robin cycle.
+# For lightweight tasks that need to be reasonably fresh.
+HIGH_FREQUENCY_TASK_CLASSES: List[Type[AnalysisTask]] = [
+    FriendlyArmyValueAnalyzer,
+    EnemyArmyValueAnalyzer,
+]
+
+# LOW_FREQUENCY: Run one task per frame periodically.
+# For heavyweight tasks that are expensive to compute.
+LOW_FREQUENCY_TASK_CLASSES: List[Type[AnalysisTask]] = [
+    ThreatMapAnalyzer,
+    ExpansionAnalyzer,
+    KnownEnemyTownhallAnalyzer,
+]
+```
+
+---
+
+### File: `core/analysis/army_value_analyzer.py`
+
+```python
+from typing import TYPE_CHECKING
+
+from core.interfaces.analysis_task_abc import AnalysisTask
+from core.utilities.unit_value import calculate_army_value
+
+if TYPE_CHECKING:
+    from sc2.bot_ai import BotAI
+    from core.game_analysis import GameAnalyzer
+
+
+class FriendlyArmyValueAnalyzer(AnalysisTask):
+    """Calculates the resource value of all friendly non-worker, non-structure units."""
+
+    def execute(self, analyzer: "GameAnalyzer", bot: "BotAI"):
+        if analyzer.friendly_army_units is not None:
+            analyzer.friendly_army_value = calculate_army_value(
+                analyzer.friendly_army_units, bot.game_data
+            )
+
+
+class EnemyArmyValueAnalyzer(AnalysisTask):
+    """Calculates the resource value of all known visible enemy units."""
+
+    def execute(self, analyzer: "GameAnalyzer", bot: "BotAI"):
+        # Note: This uses bot.enemy_units (visible) for performance, not analyzer.known_enemy_units (persistent).
+        # This gives a "current threat" value rather than a "total known army" value.
+        analyzer.enemy_army_value = calculate_army_value(bot.enemy_units, bot.game_data)
+```
+
+---
+
+### File: `core/analysis/expansion_analyzer.py`
+
+```python
+# core/analysis/expansion_analyzer.py
+
+from typing import TYPE_CHECKING
+
+from sc2.data import race_townhalls
+
+from core.interfaces.analysis_task_abc import AnalysisTask
+from core.utilities.events import Event, EventType
+
+if TYPE_CHECKING:
+    from sc2.bot_ai import BotAI
+    from core.event_bus import EventBus
+    from core.game_analysis import GameAnalyzer
+
+
+class ExpansionAnalyzer(AnalysisTask):
+    """
+    Analyzes and maintains the state of all expansion locations on the map.
+    """
+
+    def __init__(self, event_bus: "EventBus"):
+        super().__init__(event_bus)
+
+    def subscribe_to_events(self, event_bus: "EventBus"):
+        event_bus.subscribe(EventType.UNIT_DESTROYED, self.handle_unit_destruction)
+
+    def execute(self, analyzer: "GameAnalyzer", bot: "BotAI"):
+        """Periodically updates the status of all expansion locations."""
+        all_expansion_locations = set(bot.expansion_locations_list)
+
+        analyzer.occupied_locations = set(bot.owned_expansions.keys())
+
+        enemy_occupied_locs = set()
+        if analyzer.known_enemy_townhalls:
+            for th in analyzer.known_enemy_townhalls:
+                closest_exp_loc = min(
+                    bot.expansion_locations_list,
+                    key=lambda loc: loc.distance_to(th.position),
+                )
+                if th.position.distance_to(closest_exp_loc) < 10:
+                    enemy_occupied_locs.add(closest_exp_loc)
+
+        analyzer.enemy_occupied_locations = enemy_occupied_locs
+
+        analyzer.available_expansion_locations = (
+            all_expansion_locations
+            - analyzer.occupied_locations
+            - analyzer.enemy_occupied_locations
+        )
+
+    async def handle_unit_destruction(self, event: Event):
+        # Hook for future reactive updates.
+        pass
+```
+
+---
+
+### File: `core/analysis/known_enemy_townhall_analyzer.py`
+
+```python
+from typing import TYPE_CHECKING
+
+from sc2.data import race_townhalls
+
+from core.interfaces.analysis_task_abc import AnalysisTask
+
+if TYPE_CHECKING:
+    from sc2.bot_ai import BotAI
+    from core.game_analysis import GameAnalyzer
+
+
+class KnownEnemyTownhallAnalyzer(AnalysisTask):
+    """
+    A stateless task that filters the list of all known enemy structures
+    (provided by the UnitAnalyzer) to find townhalls.
+    """
+
+    def execute(self, analyzer: "GameAnalyzer", bot: "BotAI"):
+        """
+        Filters the known_enemy_structures from the analyzer to populate the
+        known_enemy_townhalls field.
+        """
+        if analyzer.known_enemy_structures is None:
+            return
+
+        enemy_th_types = race_townhalls.get(bot.enemy_race, set())
+
+        if not enemy_th_types:
+            analyzer.known_enemy_townhalls = bot.enemy_structures.subgroup([])
+            return
+
+        analyzer.known_enemy_townhalls = analyzer.known_enemy_structures.of_type(
+            enemy_th_types
+        )
+```
+
+---
+
+### File: `core/analysis/threat_map_analyzer.py`
+
+```python
+from typing import TYPE_CHECKING
+import numpy as np
+
+from core.interfaces.analysis_task_abc import AnalysisTask
+from core.utilities.geometry import create_threat_map
+
+if TYPE_CHECKING:
+    from sc2.bot_ai import BotAI
+    from core.game_analysis import GameAnalyzer
+
+
+class ThreatMapAnalyzer(AnalysisTask):
+    """Generates and updates a 2D map representing enemy threat levels."""
+
+    def execute(self, analyzer: "GameAnalyzer", bot: "BotAI"):
+        map_size = bot.game_info.map_size
+        if bot.enemy_units.exists:
+            analyzer.threat_map = create_threat_map(bot.enemy_units, map_size)
+        elif analyzer.threat_map is None:
+            analyzer.threat_map = np.zeros(map_size, dtype=np.float32)
+```
+
+---
+
+### File: `core/analysis/units_analyzer.py`
+
+```python
+# core/analysis/unit_analyzer.py
+
+from typing import TYPE_CHECKING, Dict
+
+from sc2.unit import Unit
+from sc2.units import Units
+
+from core.interfaces.analysis_task_abc import AnalysisTask
+from core.utilities.events import (
+    Event,
+    EventType,
+    UnitDestroyedPayload,
+    EnemyUnitSeenPayload,
+)
+from core.utilities.unit_types import TERRAN_PRODUCTION_TYPES
+
+if TYPE_CHECKING:
+    from sc2.bot_ai import BotAI
+    from core.event_bus import EventBus
+    from core.game_analysis import GameAnalyzer
+
+
+class UnitsAnalyzer(AnalysisTask):
+    """
+    A central, stateful analyzer that maintains a persistent memory of all
+    known enemy units, including snapshots in the fog of war.
+    """
+
+    def __init__(self, event_bus: "EventBus"):
+        super().__init__(event_bus)
+        self._known_enemy_units: Dict[int, Unit] = {}
+
+    def subscribe_to_events(self, event_bus: "EventBus"):
+        """Subscribes to the fundamental unit-tracking events."""
+        event_bus.subscribe(
+            EventType.TACTICS_ENEMY_UNIT_SEEN, self.handle_enemy_unit_seen
+        )
+        event_bus.subscribe(EventType.UNIT_DESTROYED, self.handle_unit_destroyed)
+
+    def execute(self, analyzer: "GameAnalyzer", bot: "BotAI"):
+        """
+        On each frame, this method updates the GameAnalyzer with the current
+        snapshot of all known units from its persistent memory.
+        """
+        all_friendly_units = bot.units
+
+        analyzer.friendly_units = all_friendly_units
+        analyzer.friendly_structures = all_friendly_units.structure
+        analyzer.friendly_workers = all_friendly_units.worker
+
+        analyzer.friendly_army_units = all_friendly_units.filter(
+            lambda u: not u.is_structure and not u.is_worker
+        )
+        analyzer.idle_production_structures = analyzer.friendly_structures.of_type(
+            TERRAN_PRODUCTION_TYPES
+        ).idle
+        analyzer.known_enemy_units = Units(self._known_enemy_units.values(), bot)
+        analyzer.known_enemy_structures = analyzer.known_enemy_units.structure
+
+    async def handle_enemy_unit_seen(self, event: Event):
+        """Adds or updates a unit in our persistent memory when it enters vision."""
+        payload: EnemyUnitSeenPayload = event.payload
+        self._known_enemy_units[payload.unit.tag] = payload.unit
+
+    async def handle_unit_destroyed(self, event: Event):
+        """Removes a unit from our persistent memory when it is destroyed."""
+        payload: UnitDestroyedPayload = event.payload
+        self._known_enemy_units.pop(payload.unit_tag, None)
+```
+
+---
+
+### File: `core/interfaces/analysis_task_abc.py`
+
+```python
+# core/interfaces/analysis_task_abc.py
+
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from sc2.bot_ai import BotAI
+    from core.event_bus import EventBus
+    from core.game_analysis import GameAnalyzer
+
+
+class AnalysisTask(ABC):
+    """
+    Abstract base class for a single, focused analysis task.
+    """
+
+    def __init__(self, event_bus: Optional["EventBus"] = None):
+        """
+        Initializes the task.
+        An optional EventBus can be passed for tasks that need to react to events.
+        """
+        if event_bus:
+            self.subscribe_to_events(event_bus)
+
+    @abstractmethod
+    def execute(self, analyzer: "GameAnalyzer", bot: "BotAI"):
+        """
+        Executes the analysis task.
+
+        :param analyzer: The GameAnalyzer instance to read from and write to.
+        :param bot: The main bot instance, for accessing raw game state.
+        """
+        pass
 ```
 
 ---
@@ -20158,6 +20379,11 @@ code easier to read and maintain.
 
 from sc2.ids.unit_typeid import UnitTypeId
 
+TERRAN_PRODUCTION_TYPES = {
+    UnitTypeId.BARRACKS,
+    UnitTypeId.FACTORY,
+    UnitTypeId.STARPORT,
+}
 # A set of all worker types across all races.
 WORKER_TYPES = {UnitTypeId.SCV, UnitTypeId.PROBE, UnitTypeId.DRONE}
 

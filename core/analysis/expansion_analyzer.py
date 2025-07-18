@@ -1,5 +1,3 @@
-# core/analysis/expansion_analyzer.py
-
 from typing import TYPE_CHECKING
 
 from sc2.data import race_townhalls
@@ -18,8 +16,8 @@ class ExpansionAnalyzer(AnalysisTask):
     Analyzes and maintains the state of all expansion locations on the map.
     """
 
-    def __init__(self, event_bus: "EventBus"):
-        super().__init__(event_bus)
+    def __init__(self):
+        super().__init__()
 
     def subscribe_to_events(self, event_bus: "EventBus"):
         event_bus.subscribe(EventType.UNIT_DESTROYED, self.handle_unit_destruction)
