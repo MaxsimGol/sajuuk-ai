@@ -8,6 +8,11 @@ code easier to read and maintain.
 
 from sc2.ids.unit_typeid import UnitTypeId
 
+TERRAN_PRODUCTION_TYPES = {
+    UnitTypeId.BARRACKS,
+    UnitTypeId.FACTORY,
+    UnitTypeId.STARPORT,
+}
 # A set of all worker types across all races.
 WORKER_TYPES = {UnitTypeId.SCV, UnitTypeId.PROBE, UnitTypeId.DRONE}
 

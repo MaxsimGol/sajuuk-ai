@@ -1,91 +1,91 @@
+# sajuuk.py
+
 import asyncio
 from typing import TYPE_CHECKING
 
 from sc2.bot_ai import BotAI
 from sc2.data import Race
+from sc2.unit import Unit
 
-if TYPE_CHECKING:
-    from core.event_bus import EventBus
-
-# Core Services (No changes here)
 from core.global_cache import GlobalCache
 from core.game_analysis import GameAnalyzer
 from core.frame_plan import FramePlan
 from core.types import CommandFunctor
 from core.interfaces.race_general_abc import RaceGeneral
-from core.utilities.events import Event, EventType, UnitDestroyedPayload
-
+from core.utilities.events import (
+    Event,
+    EventType,
+    UnitDestroyedPayload,
+    EnemyUnitSeenPayload,
+)
 from terran.general.terran_general import TerranGeneral
 
-# ... other generals
+if TYPE_CHECKING:
+    from core.event_bus import EventBus
 
 
 class Sajuuk(BotAI):
-    """
-    The Conductor. (Documentation remains the same)
-    """
+    """The Conductor. Orchestrates the main Perceive-Analyze-Plan-Act loop."""
 
     def __init__(self):
-        """(Initialization is the same)"""
         super().__init__()
-        self.global_cache: GlobalCache = GlobalCache()
+        self.global_cache = GlobalCache()
         self.event_bus: "EventBus" = self.global_cache.event_bus
-        self.game_analyzer: GameAnalyzer = GameAnalyzer()
+        self.game_analyzer = GameAnalyzer(self.event_bus)
         self.active_general: RaceGeneral | None = None
 
     async def on_start(self):
-        """(on_start is the same)"""
         if self.race == Race.Terran:
             self.active_general = TerranGeneral(self)
         else:
             raise NotImplementedError(f"Sajuuk does not support race: {self.race}")
-
         if self.active_general:
             await self.active_general.on_start()
 
+    async def on_enemy_unit_entered_vision(self, unit: Unit):
+        self.event_bus.publish(
+            Event(EventType.TACTICS_ENEMY_UNIT_SEEN, EnemyUnitSeenPayload(unit))
+        )
+
     async def on_unit_destroyed(self, unit_tag: int):
-        unit = self._all_units_previous_map[unit_tag]
-        unit_type = unit.type_id
-        last_known_position = unit.position
+        unit = self._all_units_previous_map.get(unit_tag)
+        if not unit:
+            return
         self.event_bus.publish(
             Event(
                 EventType.UNIT_DESTROYED,
-                UnitDestroyedPayload(unit_tag, unit_type, last_known_position),
+                UnitDestroyedPayload(unit.tag, unit.type_id, unit.position),
             )
         )
 
     async def on_step(self, iteration: int):
-        # 1. PERCEIVE
-        self.global_cache.update(self.state, self)
+        # 1. ANALYZE: Run the full analysis pipeline. The analyzer reads raw
+        # state from 'self' (the bot object) and updates its own attributes.
+        self.game_analyzer.run(self)
 
-        # 2. ANALYZE
-        self.game_analyzer.run_scheduled_tasks(self.global_cache, self)
+        # 2. CACHE: Populate the GlobalCache with a consistent snapshot for this frame,
+        # combining raw state with the now-complete analysis.
+        self.global_cache.update(self, self.game_analyzer)
 
-        # 3. PLAN
+        # 3. PLAN: Create a fresh "scratchpad" for this frame's intentions.
         frame_plan = FramePlan()
 
-        # 4. DECIDE
+        # 4. DECIDE: The race-specific General orchestrates its Directors, which
+        # read from the GlobalCache and write their decisions to the FramePlan.
         command_functors: list[CommandFunctor] = await self.active_general.execute_step(
             self.global_cache, frame_plan, self.event_bus
         )
 
-        # 5. ACT: Execute all collected command functors with intelligent handling.
+        # 5. ACT: Execute all collected commands.
         if command_functors:
-            # This is the new, more robust execution logic.
-            # We separate the synchronous from the asynchronous functors.
-            async_tasks = []
-            for func in command_functors:
-                result = func()
-                # If the result is a coroutine, it's an async action.
-                # We add it to our list of tasks to be gathered.
-                if asyncio.iscoroutine(result):
-                    async_tasks.append(result)
-                # If the result is not a coroutine, it was a synchronous action
-                # that has already completed. We do nothing further.
-
-            # We then await all the async tasks concurrently.
+            async_tasks = [
+                func() for func in command_functors if asyncio.iscoroutine(func())
+            ]
+            sync_actions = [
+                func() for func in command_functors if not asyncio.iscoroutine(func())
+            ]  # For immediate effect actions
             if async_tasks:
                 await asyncio.gather(*async_tasks)
 
-        # 6. PROCESS REFLEXES (remains the same)
+        # 6. PROCESS REFLEXES: Handle all events queued during the frame.
         await self.event_bus.process_events()

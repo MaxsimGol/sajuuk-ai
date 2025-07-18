@@ -1,127 +1,94 @@
-from enum import Enum, auto
-from typing import TYPE_CHECKING
+# core/game_analysis.py
 
+from typing import TYPE_CHECKING, List
 import numpy as np
+import inspect
+
+from sc2.units import Units
+
+from core.interfaces.analysis_task_abc import AnalysisTask
+from core.event_bus import EventBus
+from core.utilities.constants import LOW_FREQUENCY_TASK_RATE
+from core.analysis.analysis_configuration import (
+    HIGH_FREQUENCY_TASK_CLASSES,
+    LOW_FREQUENCY_TASK_CLASSES,
+    PRE_ANALYSIS_TASK_CLASSES,
+)
 
 if TYPE_CHECKING:
     from sc2.bot_ai import BotAI
-    from core.global_cache import GlobalCache
-
-from sc2.data import race_townhalls
-
-from core.utilities.geometry import create_threat_map
-from core.utilities.unit_value import calculate_army_value
-from core.utilities.constants import LOW_FREQUENCY_TASK_RATE
-from core.event_bus import EventBus
-from core.utilities.events import Event, EventType
-
-
-class HighFrequencyTask(Enum):
-    """Defines lightweight tasks that can run in a fast round-robin cycle."""
-
-    UPDATE_FRIENDLY_ARMY_VALUE = auto()
-    UPDATE_ENEMY_ARMY_VALUE = auto()
-
-
-class LowFrequencyTask(Enum):
-    """Defines heavyweight tasks that run on a slower, periodic cycle."""
-
-    UPDATE_THREAT_MAP = auto()
-    UPDATE_AVAILABLE_EXPANSIONS = auto()
+    from sc2.position import Point2
 
 
 class GameAnalyzer:
     """
-    An active component that performs scheduled analysis using a tiered approach.
-
-    High-frequency tasks (like army value) are cycled through on every frame.
-    Low-frequency tasks (like threat maps) are executed only once every N frames
-    to ensure smooth performance.
+    The central analysis engine. Owns analytical state and runs a staged,
+    scheduled pipeline of tasks to ensure data dependencies and performance.
     """
 
-    def __init__(self):
-        """Initializes the task lists for each tier."""
-        self.global_cache: GlobalCache | None = None
-        self.event_bus: EventBus | None = None
-        self._high_freq_tasks: list[HighFrequencyTask] = list(HighFrequencyTask)
-        self._low_freq_tasks: list[LowFrequencyTask] = list(LowFrequencyTask)
+    def __init__(self, event_bus: EventBus):
+        # --- Analytical State Attributes ---
+        self.friendly_army_value: int = 0
+        self.enemy_army_value: int = 0
+        self.friendly_units: Units | None = None
+        self.friendly_structures: Units | None = None
+        self.friendly_workers: Units | None = None
+        self.friendly_army_units: Units | None = None
+        self.idle_production_structures: Units | None = None
+        self.threat_map: np.ndarray | None = None
+        self.known_enemy_units: Units | None = None
+        self.known_enemy_structures: Units | None = None
+        self.known_enemy_townhalls: Units | None = None
+        self.available_expansion_locations: set[Point2] = set()
+        self.occupied_locations: set[Point2] = set()
+        self.enemy_occupied_locations: set[Point2] = set()
 
+        # --- Task Pipeline and Scheduler ---
+        self._pre_analysis_tasks: List[AnalysisTask] = self._instantiate_tasks(
+            PRE_ANALYSIS_TASK_CLASSES, event_bus
+        )
+        self._high_freq_tasks: List[AnalysisTask] = self._instantiate_tasks(
+            HIGH_FREQUENCY_TASK_CLASSES, event_bus
+        )
+        self._low_freq_tasks: List[AnalysisTask] = self._instantiate_tasks(
+            LOW_FREQUENCY_TASK_CLASSES, event_bus
+        )
         self._high_freq_index: int = 0
         self._low_freq_index: int = 0
 
-    def run_scheduled_tasks(self, cache: "GlobalCache", bot: "BotAI"):
-        """
-        Executes the next scheduled tasks based on the tiered schedule.
+    def _instantiate_tasks(
+        self, task_classes: List[type[AnalysisTask]], event_bus: EventBus
+    ) -> List[AnalysisTask]:
+        """Factory helper to instantiate tasks, injecting dependencies as needed."""
+        tasks = []
+        for TaskCls in task_classes:
+            sig = inspect.signature(TaskCls.__init__)
+            if "event_bus" in sig.parameters:
+                tasks.append(TaskCls(event_bus=event_bus))
+            else:
+                tasks.append(TaskCls())
+        return tasks
 
-        This method is called once per frame by the RaceGeneral.
-        """
-        if not self.global_cache:
-            self.global_cache = cache
-            self.event_bus = self.global_cache.event_bus
-            self.event_bus.subscribe(
-                EventType.UNIT_DESTROYED, self.handle_unit_destruction
-            )
-        # --- Always run one high-frequency task ---
+    def run(self, bot: "BotAI"):
+        """Executes the full analysis pipeline for the current game frame."""
+        # STAGE 1: Pre-Analysis (every frame, guaranteed order)
+        for task in self._pre_analysis_tasks:
+            task.execute(self, bot)
+
+        # STAGE 2: Scheduled High-Frequency Analysis (round-robin)
         if self._high_freq_tasks:
             task_to_run = self._high_freq_tasks[self._high_freq_index]
-            self._execute_high_frequency_task(task_to_run, cache, bot)
+            task_to_run.execute(self, bot)
             self._high_freq_index = (self._high_freq_index + 1) % len(
                 self._high_freq_tasks
             )
 
-        # --- Only run one low-frequency task periodically ---
+        # STAGE 3: Scheduled Low-Frequency Analysis (periodic)
         if self._low_freq_tasks and (
             bot.state.game_loop % LOW_FREQUENCY_TASK_RATE == 0
         ):
             task_to_run = self._low_freq_tasks[self._low_freq_index]
-            self._execute_low_frequency_task(task_to_run, cache, bot)
+            task_to_run.execute(self, bot)
             self._low_freq_index = (self._low_freq_index + 1) % len(
                 self._low_freq_tasks
             )
-
-    def _execute_high_frequency_task(
-        self, task: HighFrequencyTask, cache: "GlobalCache", bot: "BotAI"
-    ):
-        """Executes a specific high-frequency analysis task."""
-        if task == HighFrequencyTask.UPDATE_FRIENDLY_ARMY_VALUE:
-            # Get your mobile army units excluding workers
-            exclude_tags = bot.workers.tags
-            army_units = bot.units.tags_not_in(exclude_tags)
-            cache.friendly_army_value = calculate_army_value(army_units, bot.game_data)
-        elif task == HighFrequencyTask.UPDATE_ENEMY_ARMY_VALUE:
-            cache.enemy_army_value = calculate_army_value(
-                bot.enemy_units, bot.game_data
-            )
-
-    def _execute_low_frequency_task(
-        self, task: LowFrequencyTask, cache: "GlobalCache", bot: "BotAI"
-    ):
-        """Executes a specific low-frequency analysis task."""
-        if task == LowFrequencyTask.UPDATE_THREAT_MAP:
-            map_size = bot.game_info.map_size
-            if bot.enemy_units.exists:
-                cache.threat_map = create_threat_map(bot.enemy_units, map_size)
-            elif cache.threat_map is None:
-                cache.threat_map = np.zeros(map_size, dtype=np.float32)
-        elif task == LowFrequencyTask.UPDATE_AVAILABLE_EXPANSIONS:
-            # all_expansion_locations = set(bot.expansion_locations_list)
-            # cache.occupied_locations = {bot.owned_expansions}
-            # enemy_townhall_types = race_townhalls[bot.enemy_race]
-            # cache.enemy_occupied_locations = {
-            #     enemy_townhall.position
-            #     for enemy_townhall in bot.enemy_structures.of_type(enemy_townhall_types)
-            # }
-
-            # # Available locations are those that are not occupied by us or the enemy.
-            # cache.available_expansion_locations = (
-            #     all_expansion_locations
-            #     - cache.occupied_locations
-            #     - cache.enemy_occupied_locations
-            # )
-            pass
-
-    async def handle_unit_destruction(self, event: Event):
-        self.update_enemy_townhalls()
-
-    async def update_enemy_townhalls():
-        pass
