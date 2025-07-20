@@ -1,146 +1,140 @@
-# tests/test_core/test_global_cache.py
-
 import unittest
-from unittest.mock import Mock, PropertyMock
+from unittest.mock import MagicMock
 
 import numpy as np
-from sc2.ids.unit_typeid import UnitTypeId
-from sc2.unit import Unit
+from sc2.units import Units
 
-
-# Use a test double for the Units class to provide necessary properties.
-class UnitsTestDouble(list):
-    def of_type(self, type_id_set):
-        """A simple mock implementation of the of_type filter."""
-        return UnitsTestDouble([u for u in self if u.type_id in type_id_set])
-
-    @property
-    def structure(self):
-        return UnitsTestDouble([u for u in self if u.is_structure])
-
-    @property
-    def worker(self):
-        return UnitsTestDouble([u for u in self if u.is_worker])
-
-    @property
-    def not_structure(self):
-        return UnitsTestDouble([u for u in self if not u.is_structure])
-
-    @property
-    def not_worker(self):
-        return UnitsTestDouble([u for u in self if not u.is_worker])
-
-    @property
-    def idle(self):
-        return self
+from core.global_cache import GlobalCache
+from core.event_bus import EventBus
 
 
 class TestGlobalCache(unittest.TestCase):
     """
-    Tests the GlobalCache class to ensure it passively stores data
-    and correctly populates its high-frequency attributes from game_state.
+    Tests the GlobalCache class to ensure it functions as a reliable,
+    passive data container that is correctly updated each frame.
     """
 
     def setUp(self):
-        """Create a fresh cache and mock dependencies for each test."""
-        from core.global_cache import GlobalCache
-
+        """
+        Create a fresh GlobalCache instance before each test.
+        """
         self.cache = GlobalCache()
 
-        # Mock the main bot and game state objects
-        self.mock_bot = Mock()
-        self.mock_game_state = Mock()
+    def test_init_initializes_correctly(self):
+        """
+        Tests that a new GlobalCache instance starts with the expected default values.
+        """
+        # Assert core components are instantiated
+        self.assertIsInstance(self.cache.event_bus, EventBus)
+        self.assertIsNotNone(self.cache.logger)
 
-        # Mock nested properties for common state
-        self.mock_bot.game_info.map_ramps = ["ramp1"]
-        self.mock_bot.expansion_locations_list = ["loc1"]
+        # Assert data attributes have correct default values
+        self.assertIsNone(self.cache.bot)
+        self.assertEqual(self.cache.game_loop, 0)
+        self.assertEqual(self.cache.minerals, 0)
+        self.assertEqual(self.cache.vespene, 0)
+        self.assertIsNone(self.cache.friendly_units)
+        self.assertEqual(self.cache.friendly_army_value, 0)
+        self.assertEqual(self.cache.enemy_army_value, 0)
+        self.assertEqual(self.cache.available_expansion_locations, set())
 
-        # Mock the 'common' attribute on game_state
-        self.mock_game_state.common = Mock()
-        self.mock_game_state.common.minerals = 50
-        self.mock_game_state.common.vespene = 25
-        self.mock_game_state.common.food_used = 15
-        self.mock_game_state.common.food_cap = 23
-        self.mock_game_state.upgrades = {"upgrade1"}
+    def test_update_copies_all_attributes_from_bot_and_analyzer(self):
+        """
+        The primary test for GlobalCache. It verifies that the update method
+        correctly copies every relevant attribute from the BotAI and GameAnalyzer
+        source objects into its own state.
+        """
+        # Arrange: Create mock BotAI and GameAnalyzer objects with unique, testable values.
+        mock_bot = MagicMock()
+        mock_bot.state.game_loop = 1337
+        mock_bot.minerals = 500
+        mock_bot.vespene = 250
+        mock_bot.supply_used = 50
+        mock_bot.supply_cap = 100
+        mock_bot.supply_left = 50
+        mock_bot.state.upgrades = {"upgrade1", "upgrade2"}
+        mock_bot.enemy_units = "mock_enemy_units"
+        mock_bot.enemy_structures = "mock_enemy_structures"
+        mock_bot.game_info.map_ramps = ["ramp_A", "ramp_B"]
 
-    def test_update_populates_common_state(self):
-        """Verify that basic resource and supply counts are updated."""
-        # Arrange
-        self.mock_game_state.game_loop = 100  # Not first frame
+        mock_analyzer = MagicMock()
+        mock_analyzer.friendly_units = "mock_friendly_units"
+        mock_analyzer.friendly_structures = "mock_friendly_structures"
+        mock_analyzer.friendly_workers = "mock_friendly_workers"
+        mock_analyzer.friendly_army_units = "mock_friendly_army_units"
+        mock_analyzer.idle_production_structures = "mock_idle_prod_structures"
+        mock_analyzer.threat_map = np.array([[1, 2], [3, 4]])
+        mock_analyzer.friendly_army_value = 12345
+        mock_analyzer.enemy_army_value = 54321
+        mock_analyzer.known_enemy_units = "mock_known_enemies"
+        mock_analyzer.known_enemy_structures = "mock_known_enemy_structs"
+        mock_analyzer.known_enemy_townhalls = "mock_known_enemy_ths"
+        mock_analyzer.available_expansion_locations = {"loc1", "loc2"}
+        mock_analyzer.occupied_locations = {"loc3"}
+        mock_analyzer.enemy_occupied_locations = {"loc4"}
 
-        # Act
-        self.cache.update(self.mock_game_state, self.mock_bot)
+        # Act: Run the update method
+        self.cache.update(mock_bot, mock_analyzer)
 
-        # Assert
-        self.assertEqual(self.cache.minerals, 50)
-        self.assertEqual(self.cache.vespene, 25)
-        self.assertEqual(self.cache.supply_used, 15)
-        self.assertEqual(self.cache.supply_cap, 23)
-        self.assertEqual(self.cache.supply_left, 8)  # 23 - 15
-        self.assertEqual(self.cache.friendly_upgrades, {"upgrade1"})
+        # Assert: Verify every single attribute was copied correctly
+        # Raw Perceived State from BotAI
+        self.assertEqual(self.cache.game_loop, 1337)
+        self.assertEqual(self.cache.minerals, 500)
+        self.assertEqual(self.cache.vespene, 250)
+        self.assertEqual(self.cache.supply_used, 50)
+        self.assertEqual(self.cache.supply_cap, 100)
+        self.assertEqual(self.cache.supply_left, 50)
+        self.assertEqual(self.cache.friendly_upgrades, {"upgrade1", "upgrade2"})
+        self.assertEqual(self.cache.enemy_units, "mock_enemy_units")
+        self.assertEqual(self.cache.enemy_structures, "mock_enemy_structures")
+        self.assertEqual(self.cache.map_ramps, ["ramp_A", "ramp_B"])
 
-    def test_update_populates_static_map_info_on_first_frame_only(self):
-        """Verify map_ramps and expansion_locations are set only on game_loop 0."""
-        # --- Frame 0 ---
-        # Arrange
-        self.mock_game_state.game_loop = 0
-
-        # Act
-        self.cache.update(self.mock_game_state, self.mock_bot)
-
-        # Assert
-        self.assertEqual(self.cache.map_ramps, ["ramp1"])
-        self.assertEqual(self.cache.expansion_locations, ["loc1"])
-
-        # --- Frame 1 ---
-        # Arrange: Change the source data on the mock bot
-        self.mock_bot.game_info.map_ramps = ["new_ramp"]
-        self.mock_game_state.game_loop = 1
-
-        # Act
-        self.cache.update(self.mock_game_state, self.mock_bot)
-
-        # Assert: The cache data should NOT have changed
-        self.assertEqual(self.cache.map_ramps, ["ramp1"])
-
-    def test_update_populates_unit_collections(self):
-        """Verify that unit lists are correctly filtered and populated."""
-        # Arrange
-        mock_scv = Mock(spec=Unit)
-        mock_scv.is_structure = False
-        mock_scv.is_worker = True
-
-        mock_marine = Mock(spec=Unit)
-        mock_marine.is_structure = False
-        mock_marine.is_worker = False
-
-        mock_barracks = Mock(spec=Unit, type_id=UnitTypeId.BARRACKS)
-        mock_barracks.is_structure = True
-        mock_barracks.is_worker = False
-
-        self.mock_game_state.units = UnitsTestDouble(
-            [mock_scv, mock_marine, mock_barracks]
+        # Analyzed State from GameAnalyzer
+        self.assertEqual(self.cache.friendly_units, "mock_friendly_units")
+        self.assertEqual(self.cache.friendly_structures, "mock_friendly_structures")
+        self.assertEqual(self.cache.friendly_workers, "mock_friendly_workers")
+        self.assertEqual(self.cache.friendly_army_units, "mock_friendly_army_units")
+        self.assertEqual(
+            self.cache.idle_production_structures, "mock_idle_prod_structures"
         )
+        np.testing.assert_array_equal(self.cache.threat_map, np.array([[1, 2], [3, 4]]))
+        self.assertEqual(self.cache.friendly_army_value, 12345)
+        self.assertEqual(self.cache.enemy_army_value, 54321)
+        self.assertEqual(self.cache.known_enemy_units, "mock_known_enemies")
+        self.assertEqual(self.cache.known_enemy_structures, "mock_known_enemy_structs")
+        self.assertEqual(self.cache.known_enemy_townhalls, "mock_known_enemy_ths")
+        self.assertEqual(self.cache.available_expansion_locations, {"loc1", "loc2"})
+        self.assertEqual(self.cache.occupied_locations, {"loc3"})
+        self.assertEqual(self.cache.enemy_occupied_locations, {"loc4"})
 
-        # Act
-        self.cache.update(self.mock_game_state, self.mock_bot)
-
-        # Assert
-        self.assertEqual(list(self.cache.friendly_workers), [mock_scv])
-        self.assertEqual(list(self.cache.friendly_army_units), [mock_marine])
-        self.assertEqual(list(self.cache.friendly_structures), [mock_barracks])
-        self.assertEqual(list(self.cache.idle_production_structures), [mock_barracks])
-
-    def test_update_does_not_change_analytical_data(self):
-        """Verify that update() does not touch data populated by the GameAnalyzer."""
+    def test_update_sets_bot_and_map_ramps_only_on_first_call(self):
+        """
+        Tests the special logic that the main 'bot' object and 'map_ramps' are
+        only set the very first time update() is called.
+        """
         # Arrange
-        initial_threat_map = np.zeros((1, 1))
-        self.cache.threat_map = initial_threat_map
-        self.cache.enemy_army_value = 5000
+        mock_bot_1 = MagicMock()
+        mock_bot_1.game_info.map_ramps = ["initial_ramps"]
+        mock_analyzer = MagicMock()
 
-        # Act
-        self.cache.update(self.mock_game_state, self.mock_bot)
+        mock_bot_2 = MagicMock()
+        mock_bot_2.game_info.map_ramps = ["different_ramps"]
 
-        # Assert
-        self.assertIs(self.cache.threat_map, initial_threat_map)
-        self.assertEqual(self.cache.enemy_army_value, 5000)
+        # Act (First call)
+        self.cache.update(mock_bot_1, mock_analyzer)
+
+        # Assert (First call)
+        self.assertIs(self.cache.bot, mock_bot_1)
+        self.assertEqual(self.cache.map_ramps, ["initial_ramps"])
+
+        # Act (Second call with a different bot object)
+        self.cache.update(mock_bot_2, mock_analyzer)
+
+        # Assert (Second call)
+        # The bot object and map_ramps should NOT have been updated.
+        self.assertIs(self.cache.bot, mock_bot_1)
+        self.assertEqual(self.cache.map_ramps, ["initial_ramps"])
+
+
+if __name__ == "__main__":
+    unittest.main()

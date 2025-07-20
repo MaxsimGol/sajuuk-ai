@@ -1,131 +1,272 @@
-# tests/test_core/test_game_analysis.py
+import unittest
+from unittest.mock import MagicMock, patch
 
-from unittest import IsolatedAsyncioTestCase
-from unittest.mock import Mock, patch, call
 
-from core.game_analysis import GameAnalyzer, HighFrequencyTask, LowFrequencyTask
+import numpy as np
+from sc2.game_data import Cost
+from sc2.ids.unit_typeid import UnitTypeId
+from sc2.position import Point2
+from sc2.units import Units
+from sc2.data import Race
+
+from core.analysis.analysis_configuration import (
+    HIGH_FREQUENCY_TASK_CLASSES,
+    LOW_FREQUENCY_TASK_CLASSES,
+    PRE_ANALYSIS_TASK_CLASSES,
+)
+from core.analysis.army_value_analyzer import (
+    EnemyArmyValueAnalyzer,
+    FriendlyArmyValueAnalyzer,
+)
+from core.analysis.expansion_analyzer import ExpansionAnalyzer
+from core.analysis.known_enemy_townhall_analyzer import KnownEnemyTownhallAnalyzer
+from core.analysis.threat_map_analyzer import ThreatMapAnalyzer
+from core.analysis.units_analyzer import UnitsAnalyzer
+from core.game_analysis import GameAnalyzer
 from core.utilities.constants import LOW_FREQUENCY_TASK_RATE
+from core.utilities.events import (
+    Event,
+    EventType,
+    EnemyUnitSeenPayload,
+    UnitDestroyedPayload,
+)
 
 
-# --- NEW: Test Double for the sc2.units.Units class ---
-class UnitsTestDouble(list):
-    """
-    A Test Double that mimics the essential properties of the sc2.units.Units class
-    for testing purposes. It is iterable like a list and has an `exists` property.
-    """
-
-    @property
-    def exists(self) -> bool:
-        return len(self) > 0
+def create_mock_unit(type_id, position=(0, 0), tag=0, is_structure=False):
+    """Helper function to create a mock Unit object."""
+    unit = MagicMock()
+    unit.type_id = type_id
+    unit.position = Point2(position)
+    unit.tag = tag
+    unit.is_structure = is_structure
+    return unit
 
 
-class TestGameAnalyzer(IsolatedAsyncioTestCase):
-    """
-    Tests the GameAnalyzer to ensure its tiered scheduling correctly distributes
-    computational load across game frames.
-    """
+class TestGameAnalyzerScheduler(unittest.TestCase):
+    """Tests the scheduling logic of the GameAnalyzer.run() method."""
 
     def setUp(self):
-        """
-        Set up a new analyzer and mock dependencies for each test.
-        """
-        self.analyzer = GameAnalyzer()
+        self.mock_bot = MagicMock()
+        self.mock_event_bus = MagicMock()
+        self.analyzer = GameAnalyzer(self.mock_event_bus)
 
-        self.mock_bot = Mock()
-        self.mock_cache = Mock()
+    def test_run_executes_pre_analysis_tasks_every_time(self):
+        # Arrange
+        mock_tasks = [MagicMock() for _ in PRE_ANALYSIS_TASK_CLASSES]
+        with patch.object(self.analyzer, "_pre_analysis_tasks", mock_tasks):
+            # Act
+            self.analyzer.run(self.mock_bot)
+            self.analyzer.run(self.mock_bot)
 
-        # --- KEY FIX: Use the new Test Double ---
-        # Instead of a bare list, we use our custom Test Double which has the
-        # required '.exists' property.
-        self.mock_bot.units.not_structure.not_worker = UnitsTestDouble()
-        self.mock_bot.enemy_units = UnitsTestDouble()
+            # Assert
+            for task in mock_tasks:
+                self.assertEqual(task.execute.call_count, 2)
+                task.execute.assert_called_with(self.analyzer, self.mock_bot)
 
-        self.mock_bot.state = Mock()
+    def test_run_executes_high_frequency_tasks_round_robin(self):
+        # Arrange
+        mock_tasks = [MagicMock(), MagicMock()]  # Two mock tasks
+        with patch.object(self.analyzer, "_high_freq_tasks", mock_tasks):
+            # Act & Assert - First run
+            self.analyzer.run(self.mock_bot)
+            mock_tasks[0].execute.assert_called_once_with(self.analyzer, self.mock_bot)
+            mock_tasks[1].execute.assert_not_called()
 
-    @patch.object(GameAnalyzer, "_execute_low_frequency_task")
-    @patch.object(GameAnalyzer, "_execute_high_frequency_task")
-    def test_high_frequency_tasks_cycle_every_frame(
-        self, mock_high_freq_exec, mock_low_freq_exec
-    ):
-        # ... (This test's code does not need to change) ...
-        self.mock_bot.state.game_loop = 0
-        self.analyzer.run_scheduled_tasks(self.mock_cache, self.mock_bot)
-        self.mock_bot.state.game_loop = 1
-        self.analyzer.run_scheduled_tasks(self.mock_cache, self.mock_bot)
-        self.mock_bot.state.game_loop = 2
-        self.analyzer.run_scheduled_tasks(self.mock_cache, self.mock_bot)
-        self.assertEqual(mock_high_freq_exec.call_count, 3)
-        expected_calls = [
-            call(
-                HighFrequencyTask.UPDATE_FRIENDLY_ARMY_VALUE,
-                self.mock_cache,
-                self.mock_bot,
-            ),
-            call(
-                HighFrequencyTask.UPDATE_ENEMY_ARMY_VALUE,
-                self.mock_cache,
-                self.mock_bot,
-            ),
-            call(
-                HighFrequencyTask.UPDATE_FRIENDLY_ARMY_VALUE,
-                self.mock_cache,
-                self.mock_bot,
-            ),
-        ]
-        self.assertEqual(mock_high_freq_exec.call_args_list, expected_calls)
-        self.assertEqual(mock_low_freq_exec.call_count, 1)
+            # Act & Assert - Second run
+            self.analyzer.run(self.mock_bot)
+            mock_tasks[0].execute.assert_called_once()  # Still 1
+            mock_tasks[1].execute.assert_called_once_with(self.analyzer, self.mock_bot)
 
-    @patch.object(GameAnalyzer, "_execute_low_frequency_task")
-    def test_low_frequency_tasks_run_periodically(self, mock_low_freq_exec):
-        # ... (This test's code does not need to change) ...
-        for i in range(LOW_FREQUENCY_TASK_RATE * 2 + 1):
-            self.mock_bot.state.game_loop = i
-            self.analyzer.run_scheduled_tasks(self.mock_cache, self.mock_bot)
-        self.assertEqual(mock_low_freq_exec.call_count, 3)
-        self.assertEqual(
-            mock_low_freq_exec.call_args_list[0].args[0],
-            LowFrequencyTask.UPDATE_THREAT_MAP,
+            # Act & Assert - Third run (wraps around)
+            self.analyzer.run(self.mock_bot)
+            self.assertEqual(mock_tasks[0].execute.call_count, 2)
+            self.assertEqual(mock_tasks[1].execute.call_count, 1)
+
+    def test_run_executes_low_frequency_tasks_periodically(self):
+        # Arrange
+        mock_task = MagicMock()
+        with patch.object(self.analyzer, "_low_freq_tasks", [mock_task]):
+            # Act & Assert - Off-cycle
+            self.mock_bot.state.game_loop = LOW_FREQUENCY_TASK_RATE - 1
+            self.analyzer.run(self.mock_bot)
+            mock_task.execute.assert_not_called()
+
+            # Act & Assert - On-cycle
+            self.mock_bot.state.game_loop = LOW_FREQUENCY_TASK_RATE
+            self.analyzer.run(self.mock_bot)
+            mock_task.execute.assert_called_once_with(self.analyzer, self.mock_bot)
+
+            # Act & Assert - Another off-cycle
+            self.mock_bot.state.game_loop = LOW_FREQUENCY_TASK_RATE + 1
+            self.analyzer.run(self.mock_bot)
+            mock_task.execute.assert_called_once()  # Still 1 call
+
+
+class TestAnalysisTasks(unittest.TestCase):
+    """Tests the logic of individual AnalysisTask classes."""
+
+    def setUp(self):
+        self.mock_bot = MagicMock()
+        # Mock the Units class to accept an iterable
+        self.mock_bot.units = Units([], self.mock_bot)
+        self.mock_bot.enemy_units = Units([], self.mock_bot)
+        self.mock_event_bus = MagicMock()
+        self.analyzer = GameAnalyzer(self.mock_event_bus)
+
+    def test_units_analyzer_categorizes_friendly_units(self):
+        # Arrange
+        scv = create_mock_unit(UnitTypeId.SCV)
+        marine = create_mock_unit(UnitTypeId.MARINE)
+        barracks = create_mock_unit(UnitTypeId.BARRACKS, is_structure=True)
+        self.mock_bot.units = Units([scv, marine, barracks], self.mock_bot)
+        task = UnitsAnalyzer()
+
+        # Act
+        task.execute(self.analyzer, self.mock_bot)
+
+        # Assert
+        self.assertEqual(len(self.analyzer.friendly_units), 3)
+        self.assertEqual(self.analyzer.friendly_structures.first, barracks)
+        self.assertEqual(self.analyzer.friendly_workers.first, scv)
+        self.assertEqual(self.analyzer.friendly_army_units.first, marine)
+
+    def test_friendly_army_value_analyzer(self):
+        # Arrange
+        marines = [create_mock_unit(UnitTypeId.MARINE) for _ in range(2)]
+        marauder = create_mock_unit(UnitTypeId.MARAUDER)
+        self.analyzer.friendly_army_units = Units(marines + [marauder], self.mock_bot)
+
+        # Mock game_data for cost calculation
+        self.mock_bot.game_data.units = {
+            UnitTypeId.MARINE.value: MagicMock(cost=Cost(50, 0)),
+            UnitTypeId.MARAUDER.value: MagicMock(cost=Cost(100, 25)),
+        }
+        task = FriendlyArmyValueAnalyzer()
+
+        # Act
+        task.execute(self.analyzer, self.mock_bot)
+
+        # Assert
+        expected_value = (50 * 2) + (100 + 25)
+        self.assertEqual(self.analyzer.friendly_army_value, expected_value)
+
+    def test_enemy_army_value_analyzer(self):
+        # Arrange
+        zerglings = [create_mock_unit(UnitTypeId.ZERGLING) for _ in range(4)]
+        self.mock_bot.enemy_units = Units(zerglings, self.mock_bot)
+
+        self.mock_bot.game_data.units = {
+            UnitTypeId.ZERGLING.value: MagicMock(cost=Cost(25, 0)),
+        }
+        task = EnemyArmyValueAnalyzer()
+
+        # Act
+        task.execute(self.analyzer, self.mock_bot)
+
+        # Assert
+        expected_value = 25 * 4
+        self.assertEqual(self.analyzer.enemy_army_value, expected_value)
+
+    def test_expansion_analyzer(self):
+        # Arrange
+        exp_locs = [Point2((10, 10)), Point2((20, 20)), Point2((30, 30))]
+        self.mock_bot.expansion_locations_list = exp_locs
+
+        # Friendly base at (10,10)
+        self.mock_bot.owned_expansions = {
+            exp_locs[0]: create_mock_unit(UnitTypeId.COMMANDCENTER)
+        }
+
+        # Enemy base near (30,30)
+        hatch = create_mock_unit(UnitTypeId.HATCHERY, position=(30.5, 29.5))
+        self.analyzer.known_enemy_townhalls = Units([hatch], self.mock_bot)
+
+        task = ExpansionAnalyzer()
+
+        # Act
+        task.execute(self.analyzer, self.mock_bot)
+
+        # Assert
+        self.assertEqual(self.analyzer.occupied_locations, {exp_locs[0]})
+        self.assertEqual(self.analyzer.enemy_occupied_locations, {exp_locs[2]})
+        self.assertEqual(self.analyzer.available_expansion_locations, {exp_locs[1]})
+
+    def test_known_enemy_townhall_analyzer(self):
+        # Arrange
+        hatch = create_mock_unit(UnitTypeId.HATCHERY, is_structure=True)
+        spire = create_mock_unit(UnitTypeId.SPIRE, is_structure=True)
+        self.analyzer.known_enemy_structures = Units([hatch, spire], self.mock_bot)
+        self.mock_bot.enemy_race = Race.Zerg
+        task = KnownEnemyTownhallAnalyzer()
+
+        # Act
+        task.execute(self.analyzer, self.mock_bot)
+
+        # Assert
+        self.assertEqual(len(self.analyzer.known_enemy_townhalls), 1)
+        self.assertEqual(self.analyzer.known_enemy_townhalls.first, hatch)
+
+    def test_threat_map_analyzer(self):
+        # Arrange
+        self.mock_bot.game_info.map_size = (100, 100)
+        enemy_marine = create_mock_unit(UnitTypeId.MARINE, position=(50, 50))
+        enemy_marine.radius = 0.5
+        self.mock_bot.enemy_units = Units([enemy_marine], self.mock_bot)
+        task = ThreatMapAnalyzer()
+
+        # Act
+        task.execute(self.analyzer, self.mock_bot)
+
+        # Assert
+        self.assertIsNotNone(self.analyzer.threat_map)
+        self.assertEqual(self.analyzer.threat_map.shape, (100, 100))
+        # Threat should be highest at the marine's position
+        self.assertGreater(self.analyzer.threat_map[50, 50], 0)
+        # Threat should be zero far away from the marine
+        self.assertEqual(self.analyzer.threat_map[10, 10], 0)
+
+
+class TestUnitsAnalyzerEvents(unittest.IsolatedAsyncioTestCase):
+    """
+    Tests the stateful event-driven logic of the UnitsAnalyzer.
+    Uses IsolatedAsyncioTestCase to handle async event handlers.
+    """
+
+    async def test_units_analyzer_event_handling(self):
+        # Arrange
+        mock_bot = MagicMock()
+        analyzer = GameAnalyzer(MagicMock())
+        task = UnitsAnalyzer()
+
+        # --- Test EnemyUnitSeen Event ---
+        enemy_unit = create_mock_unit(UnitTypeId.ZERGLING, tag=123)
+        seen_event = Event(
+            EventType.TACTICS_ENEMY_UNIT_SEEN, EnemyUnitSeenPayload(enemy_unit)
         )
-        self.assertEqual(
-            mock_low_freq_exec.call_args_list[1].args[0],
-            LowFrequencyTask.UPDATE_THREAT_MAP,
-        )
-        self.assertEqual(
-            mock_low_freq_exec.call_args_list[2].args[0],
-            LowFrequencyTask.UPDATE_THREAT_MAP,
-        )
 
-    @patch("core.game_analysis.create_threat_map")
-    def test_threat_map_task_calls_utility_and_updates_cache(
-        self, mock_create_threat_map
-    ):
-        """
-        An integration test to verify that executing a specific task correctly
-        calls its underlying utility function and writes the result to the cache.
-        """
-        # --- Arrange ---
-        mock_map_data = "THREAT_MAP_DATA"
-        mock_create_threat_map.return_value = mock_map_data
+        # Act
+        await task.handle_enemy_unit_seen(seen_event)
+        task.execute(analyzer, mock_bot)
 
-        # --- KEY FIX: Populate the Test Double ---
-        # We can now add mock units to our test double just like a list.
-        # This will make its `exists` property return True.
-        mock_enemy_unit = Mock()
-        self.mock_bot.enemy_units.append(mock_enemy_unit)
+        # Assert
+        self.assertIn(123, task._known_enemy_units)
+        self.assertEqual(len(analyzer.known_enemy_units), 1)
+        self.assertEqual(analyzer.known_enemy_units.first, enemy_unit)
 
-        self.mock_bot.game_info.map_size = (128, 128)
-
-        # Force the low-frequency task to run
-        self.mock_bot.state.game_loop = 0
-        self.analyzer._low_freq_index = self.analyzer._low_freq_tasks.index(
-            LowFrequencyTask.UPDATE_THREAT_MAP
+        # --- Test UnitDestroyed Event ---
+        destroyed_event = Event(
+            EventType.UNIT_DESTROYED,
+            UnitDestroyedPayload(123, UnitTypeId.ZERGLING, Point2((0, 0))),
         )
 
-        # --- Act ---
-        self.analyzer.run_scheduled_tasks(self.mock_cache, self.mock_bot)
+        # Act
+        await task.handle_unit_destroyed(destroyed_event)
+        task.execute(analyzer, mock_bot)
 
-        # --- Assert ---
-        mock_create_threat_map.assert_called_once_with(
-            self.mock_bot.enemy_units, (128, 128)
-        )
-        self.assertEqual(self.mock_cache.threat_map, mock_map_data)
+        # Assert
+        self.assertNotIn(123, task._known_enemy_units)
+        self.assertTrue(analyzer.known_enemy_units.empty)
+
+
+if __name__ == "__main__":
+    unittest.main()

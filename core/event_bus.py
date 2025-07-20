@@ -1,4 +1,5 @@
 import asyncio
+from loguru import logger
 from collections import defaultdict
 from typing import TYPE_CHECKING, Callable, Coroutine
 
@@ -75,6 +76,9 @@ class EventBus:
         """
         priority = EVENT_TYPE_PRIORITIES.get(event.event_type, EVENT_PRIORITY_NORMAL)
         self._queues[priority].append(event)
+        logger.debug(
+            f"Event Published: {event.event_type.name} with priority {priority}. Payload: {event.payload}"
+        )
 
     async def process_events(self):
         """
@@ -89,6 +93,10 @@ class EventBus:
             event_queue = self._queues[priority]
             if not event_queue:
                 continue
+
+            logger.debug(
+                f"Processing {len(event_queue)} events with priority {priority}."
+            )
 
             tasks = []
             for event in event_queue:

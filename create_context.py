@@ -6,7 +6,7 @@ from pathlib import Path
 # --- Configuration (remains the same) ---
 ROOT_DIR = Path(__file__).parent
 OUTPUT_FILE = "sajuuk_ai_context.md"
-EXCLUDE_DIRS = {"__pycache__", ".venv", ".git", ".idea", ".vscode", "tests"}
+EXCLUDE_DIRS = {"__pycache__", ".venv", ".git", ".idea", ".vscode", "tests", "logs"}
 EXCLUDE_FILES = {
     "create_context.py",
     "run_tests.py",

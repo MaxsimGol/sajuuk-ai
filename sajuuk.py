@@ -1,5 +1,4 @@
 # sajuuk.py
-
 import asyncio
 from typing import TYPE_CHECKING
 
@@ -30,6 +29,7 @@ class Sajuuk(BotAI):
     def __init__(self):
         super().__init__()
         self.global_cache = GlobalCache()
+        self.logger = self.global_cache.logger
         self.event_bus: "EventBus" = self.global_cache.event_bus
         self.game_analyzer = GameAnalyzer(self.event_bus)
         self.active_general: RaceGeneral | None = None
@@ -59,6 +59,12 @@ class Sajuuk(BotAI):
         )
 
     async def on_step(self, iteration: int):
+        # --- Bind game time to the logger for this entire step ---
+        game_time = self.time_formatted
+        log = self.logger.bind(game_time=game_time)
+
+        log.debug(f"--- Step {iteration} Start ---")
+
         # 1. PROCESS SENSOR INPUT: Handle all perception events that have been
         # queued by the on_... hooks since the last frame. This updates the
         # internal state of analyzers BEFORE they run.
@@ -71,6 +77,12 @@ class Sajuuk(BotAI):
         # 3. CACHE: Populate the GlobalCache with a consistent snapshot for this frame.
         self.global_cache.update(self, self.game_analyzer)
 
+        # --- LOG THE CACHE STATE ---
+        log.info(
+            f"Cache Updated. Army Value: {self.global_cache.friendly_army_value} (F) vs "
+            f"{self.global_cache.enemy_army_value} (E). Supply: {self.global_cache.supply_used}/{self.global_cache.supply_cap}"
+        )
+
         # 4. PLAN: Create a fresh "scratchpad" for this frame's intentions.
         frame_plan = FramePlan()
 
@@ -78,6 +90,12 @@ class Sajuuk(BotAI):
         # This phase may PUBLISH new events (like BuildRequest).
         command_functors: list[CommandFunctor] = await self.active_general.execute_step(
             self.global_cache, frame_plan, self.event_bus
+        )
+
+        # --- LOG THE FRAME PLAN ---
+        log.info(
+            f"Plan Generated. Budget: [I:{frame_plan.resource_budget.infrastructure}, C:{frame_plan.resource_budget.capabilities}]. "
+            f"Stance: {frame_plan.army_stance.name}"
         )
 
         # 6. ACT: Execute all collected commands.
@@ -91,7 +109,11 @@ class Sajuuk(BotAI):
             if async_tasks:
                 await asyncio.gather(*async_tasks)
 
+        log.debug(f"Executing {len(command_functors)} commands.")
+
         # 7. PROCESS ACTION/REQUEST EVENTS: Now process the events that were
         # queued during the DECIDE phase (step 5). This allows service managers
         # like ConstructionManager and RepairManager to run.
         await self.event_bus.process_events()
+
+        log.debug(f"--- Step {iteration} End ---")

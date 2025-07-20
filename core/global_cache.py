@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from core.game_analysis import GameAnalyzer
 
 from core.event_bus import EventBus
+from core.logger import logger
 
 
 class GlobalCache:
@@ -24,6 +25,7 @@ class GlobalCache:
 
     def __init__(self):
         self.event_bus: EventBus = EventBus()
+        self.logger = logger
 
         # Raw Perceived State
         self.bot: "BotAI" | None = None

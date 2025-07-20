@@ -1,3 +1,4 @@
 
 burnysc2
 numpy
+loguru
