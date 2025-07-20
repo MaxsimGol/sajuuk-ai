@@ -10,6 +10,8 @@ if TYPE_CHECKING:
     from sc2.position import Point2
     from sc2.unit import Unit
 
+from core.utilities.constants import EVENT_PRIORITY_NORMAL
+
 
 class EventType(Enum):
     """
@@ -65,7 +67,7 @@ class BuildRequestPayload(Payload):
 
     item_id: "UnitTypeId"
     position: "Point2" | None = None
-    priority: int = 10  # Lower number is higher priority
+    priority: int = EVENT_PRIORITY_NORMAL
 
 
 @dataclass

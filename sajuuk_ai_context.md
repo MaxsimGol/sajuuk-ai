@@ -19262,7 +19262,6 @@ class Sajuuk(BotAI):
 
 ```python
 import asyncio
-from loguru import logger
 from collections import defaultdict
 from typing import TYPE_CHECKING, Callable, Coroutine
 
@@ -19274,6 +19273,8 @@ from core.utilities.constants import (
 )
 
 if TYPE_CHECKING:
+    from loguru import Logger
+
     # A handler is an async function that takes an Event and returns nothing.
     # Coroutine[None, None, None] is the precise way to say: "This is an async
     # function that I will await, but I don't expect it to return anything,
@@ -19311,13 +19312,14 @@ class EventBus:
     running them concurrently via asyncio.gather.
     """
 
-    def __init__(self):
+    def __init__(self, logger: "Logger"):
         self._subscribers: dict[EventType, list[EventHandler]] = defaultdict(list)
         self._queues: dict[int, list[Event]] = {
             EVENT_PRIORITY_CRITICAL: [],
             EVENT_PRIORITY_HIGH: [],
             EVENT_PRIORITY_NORMAL: [],
         }
+        self.logger = logger
 
     def subscribe(self, event_type: EventType, handler: "EventHandler"):
         """
@@ -19339,7 +19341,7 @@ class EventBus:
         """
         priority = EVENT_TYPE_PRIORITIES.get(event.event_type, EVENT_PRIORITY_NORMAL)
         self._queues[priority].append(event)
-        logger.debug(
+        self.logger.debug(
             f"Event Published: {event.event_type.name} with priority {priority}. Payload: {event.payload}"
         )
 
@@ -19357,7 +19359,7 @@ class EventBus:
             if not event_queue:
                 continue
 
-            logger.debug(
+            self.logger.debug(
                 f"Processing {len(event_queue)} events with priority {priority}."
             )
 
@@ -19596,8 +19598,8 @@ class GlobalCache:
     """
 
     def __init__(self):
-        self.event_bus: EventBus = EventBus()
         self.logger = logger
+        self.event_bus: EventBus = EventBus(self.logger)
 
         # Raw Perceived State
         self.bot: "BotAI" | None = None
@@ -19681,7 +19683,23 @@ def game_time_formatter(record):
     """
     game_time_str = record["extra"].get("game_time", " " * 8)  # Default to 8 spaces
     # This is the original format string, but with our safe variable
-    return f"{{time}} {{level}} {game_time_str} | {{name}}:{{function}}:{{line}} - {{message}}\n"
+    return f"{{time:HH:mm:ss.SS}} {{level}} {game_time_str} | {{name}}:{{function}}:{{line}} - {{message}}\n"
+
+
+def sajuuk_project_filter(record):
+    """
+    This filter function returns True only for log messages originating
+    from the Sajuuk project's own modules.
+    """
+    # The 'name' of a log record is its module path, e.g., 'core.event_bus'
+    module_name = record["name"]
+    return (
+        module_name.startswith("sajuuk")
+        or module_name.startswith("core")
+        or module_name.startswith("terran")
+        or module_name.startswith("protoss")
+        or module_name.startswith("zerg")
+    )
 
 
 # --- START: MODIFIED LOGGING SETUP ---
@@ -19700,6 +19718,7 @@ logger.add(
     log_file_path,  # Use the timestamped path
     format=game_time_formatter,
     level="DEBUG",
+    filter=sajuuk_project_filter,
     rotation="10 MB",
     enqueue=True,
     backtrace=True,
@@ -19707,7 +19726,7 @@ logger.add(
 )
 
 # 4. (Optional) Add your clean console logger
-logger.add(stdout, level="WARNING")
+logger.add(stdout, level="WARNING", filter=sajuuk_project_filter)
 logger.info(f"Sajuuk logger initialized. Log file: {log_file_path}")
 ```
 

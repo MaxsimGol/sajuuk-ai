@@ -13,6 +13,11 @@ TERRAN_PRODUCTION_TYPES = {
     UnitTypeId.FACTORY,
     UnitTypeId.STARPORT,
 }
+GAS_BUILDINGS = {
+    UnitTypeId.REFINERY,
+    UnitTypeId.EXTRACTOR,
+    UnitTypeId.ASSIMILATOR,
+}
 # A set of all worker types across all races.
 WORKER_TYPES = {UnitTypeId.SCV, UnitTypeId.PROBE, UnitTypeId.DRONE}
 

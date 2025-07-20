@@ -1,6 +1,6 @@
 # sajuuk.py
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 from sc2.bot_ai import BotAI
 from sc2.data import Race
@@ -100,16 +100,19 @@ class Sajuuk(BotAI):
 
         # 6. ACT: Execute all collected commands.
         if command_functors:
-            async_tasks = [
-                func() for func in command_functors if asyncio.iscoroutine(func())
-            ]
-            sync_actions = [
-                func() for func in command_functors if not asyncio.iscoroutine(func())
-            ]
+            # FIX: This loop iterates only ONCE, preventing double execution.
+            async_tasks: List[asyncio.Task] = []
+            for func in command_functors:
+                result = func()  # Execute the lambda.
+                # If it's a sync command, the action is queued in self.do() and returns None/bool.
+                # If it's async, it returns a coroutine to be gathered.
+                if asyncio.iscoroutine(result):
+                    async_tasks.append(result)
+
             if async_tasks:
                 await asyncio.gather(*async_tasks)
 
-        log.debug(f"Executing {len(command_functors)} commands.")
+        log.debug(f"Executing {len(command_functors)} command functors.")
 
         # 7. PROCESS ACTION/REQUEST EVENTS: Now process the events that were
         # queued during the DECIDE phase (step 5). This allows service managers
