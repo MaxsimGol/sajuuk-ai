@@ -59,33 +59,39 @@ class Sajuuk(BotAI):
         )
 
     async def on_step(self, iteration: int):
-        # 1. ANALYZE: Run the full analysis pipeline. The analyzer reads raw
-        # state from 'self' (the bot object) and updates its own attributes.
+        # 1. PROCESS SENSOR INPUT: Handle all perception events that have been
+        # queued by the on_... hooks since the last frame. This updates the
+        # internal state of analyzers BEFORE they run.
+        await self.event_bus.process_events()
+
+        # 2. ANALYZE: Run the full analysis pipeline. The analyzer now has
+        # the most up-to-date information from the event handlers.
         self.game_analyzer.run(self)
 
-        # 2. CACHE: Populate the GlobalCache with a consistent snapshot for this frame,
-        # combining raw state with the now-complete analysis.
+        # 3. CACHE: Populate the GlobalCache with a consistent snapshot for this frame.
         self.global_cache.update(self, self.game_analyzer)
 
-        # 3. PLAN: Create a fresh "scratchpad" for this frame's intentions.
+        # 4. PLAN: Create a fresh "scratchpad" for this frame's intentions.
         frame_plan = FramePlan()
 
-        # 4. DECIDE: The race-specific General orchestrates its Directors, which
-        # read from the GlobalCache and write their decisions to the FramePlan.
+        # 5. DECIDE: The race-specific General orchestrates its Directors.
+        # This phase may PUBLISH new events (like BuildRequest).
         command_functors: list[CommandFunctor] = await self.active_general.execute_step(
             self.global_cache, frame_plan, self.event_bus
         )
 
-        # 5. ACT: Execute all collected commands.
+        # 6. ACT: Execute all collected commands.
         if command_functors:
             async_tasks = [
                 func() for func in command_functors if asyncio.iscoroutine(func())
             ]
             sync_actions = [
                 func() for func in command_functors if not asyncio.iscoroutine(func())
-            ]  # For immediate effect actions
+            ]
             if async_tasks:
                 await asyncio.gather(*async_tasks)
 
-        # 6. PROCESS REFLEXES: Handle all events queued during the frame.
+        # 7. PROCESS ACTION/REQUEST EVENTS: Now process the events that were
+        # queued during the DECIDE phase (step 5). This allows service managers
+        # like ConstructionManager and RepairManager to run.
         await self.event_bus.process_events()
