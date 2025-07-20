@@ -1,5 +1,3 @@
-# run_tests.py
-
 import unittest
 
 

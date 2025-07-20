@@ -12,7 +12,23 @@ def game_time_formatter(record):
     """
     game_time_str = record["extra"].get("game_time", " " * 8)  # Default to 8 spaces
     # This is the original format string, but with our safe variable
-    return f"{{time}} {{level}} {game_time_str} | {{name}}:{{function}}:{{line}} - {{message}}\n"
+    return f"{{time:HH:mm:ss.SS}} {{level}} {game_time_str} | {{name}}:{{function}}:{{line}} - {{message}}\n"
+
+
+def sajuuk_project_filter(record):
+    """
+    This filter function returns True only for log messages originating
+    from the Sajuuk project's own modules.
+    """
+    # The 'name' of a log record is its module path, e.g., 'core.event_bus'
+    module_name = record["name"]
+    return (
+        module_name.startswith("sajuuk")
+        or module_name.startswith("core")
+        or module_name.startswith("terran")
+        or module_name.startswith("protoss")
+        or module_name.startswith("zerg")
+    )
 
 
 # --- START: MODIFIED LOGGING SETUP ---
@@ -31,6 +47,7 @@ logger.add(
     log_file_path,  # Use the timestamped path
     format=game_time_formatter,
     level="DEBUG",
+    filter=sajuuk_project_filter,
     rotation="10 MB",
     enqueue=True,
     backtrace=True,
@@ -38,5 +55,5 @@ logger.add(
 )
 
 # 4. (Optional) Add your clean console logger
-logger.add(stdout, level="WARNING")
+logger.add(stdout, level="WARNING", filter=sajuuk_project_filter)
 logger.info(f"Sajuuk logger initialized. Log file: {log_file_path}")

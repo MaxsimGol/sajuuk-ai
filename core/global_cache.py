@@ -24,8 +24,8 @@ class GlobalCache:
     """
 
     def __init__(self):
-        self.event_bus: EventBus = EventBus()
         self.logger = logger
+        self.event_bus: EventBus = EventBus(self.logger)
 
         # Raw Perceived State
         self.bot: "BotAI" | None = None

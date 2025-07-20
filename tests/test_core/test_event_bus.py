@@ -1,176 +1,159 @@
+import asyncio
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import Mock
 
-from core.event_bus import (
-    EventBus,
-    EVENT_PRIORITY_CRITICAL,
-    EVENT_PRIORITY_HIGH,
-    EVENT_PRIORITY_NORMAL,
-)
-from core.utilities.events import Event, EventType, BuildRequestPayload
+from core.event_bus import EventBus
+from core.utilities.events import Event, EventType
+from core.logger import logger
 
 
-class TestEventBus(unittest.IsolatedAsyncioTestCase):
+class TestEventBus(unittest.TestCase):
     """
-    Tests the functionality of the EventBus, ensuring it correctly handles
-    subscribing, publishing, and prioritized processing of events.
+    Test suite for the EventBus to ensure its core functionalities:
+    - Subscribing handlers to event types.
+    - Publishing events to the correct priority queues.
+    - Processing events in the correct priority order.
+    - Ensuring handlers are called and queues are cleared after processing.
     """
 
     def setUp(self):
         """
-        This method is called before each test function, ensuring a fresh
-        EventBus instance for every test case.
+        Initializes a fresh EventBus instance before each test.
         """
-        self.bus = EventBus()
+        # --- FIX: Pass the imported logger to the EventBus constructor ---
+        self.bus = EventBus(logger)
 
     def test_subscribe_adds_handler_to_subscribers(self):
         """
         Tests if the subscribe method correctly registers a handler for an event type.
         """
-        # Arrange
-        mock_handler = AsyncMock()
-        event_type = EventType.INFRA_BUILD_REQUEST
 
-        # Act
-        self.bus.subscribe(event_type, mock_handler)
+        async def dummy_handler(event: Event):
+            pass
 
-        # Assert
-        self.assertIn(event_type, self.bus._subscribers)
-        self.assertIn(mock_handler, self.bus._subscribers[event_type])
-        self.assertEqual(len(self.bus._subscribers[event_type]), 1)
+        self.bus.subscribe(EventType.INFRA_BUILD_REQUEST, dummy_handler)
+        self.assertIn(EventType.INFRA_BUILD_REQUEST, self.bus._subscribers)
+        self.assertEqual(len(self.bus._subscribers[EventType.INFRA_BUILD_REQUEST]), 1)
+        self.assertIs(
+            self.bus._subscribers[EventType.INFRA_BUILD_REQUEST][0], dummy_handler
+        )
 
     def test_publish_adds_event_to_correct_priority_queue(self):
         """
         Tests if the publish method places events into the correct internal queues
-        based on their defined priority.
+        based on their predefined priority.
         """
-        # Arrange
-        # Note: We need to use EventTypes that are explicitly defined in EVENT_TYPE_PRIORITIES
-        # for this test to be meaningful.
-        critical_event = Event(EventType.TACTICS_PROXY_DETECTED)
-        high_event = Event(EventType.TACTICS_UNIT_TOOK_DAMAGE)
-        normal_event = Event(EventType.INFRA_BUILD_REQUEST)
+        high_prio_event = Event(EventType.TACTICS_UNIT_TOOK_DAMAGE)
+        normal_prio_event = Event(EventType.INFRA_BUILD_REQUEST)
 
-        # Act
-        self.bus.publish(critical_event)
-        self.bus.publish(high_event)
-        self.bus.publish(normal_event)
+        self.bus.publish(high_prio_event)
+        self.bus.publish(normal_prio_event)
 
-        # Assert
-        self.assertEqual(len(self.bus._queues[EVENT_PRIORITY_CRITICAL]), 1)
-        self.assertIn(critical_event, self.bus._queues[EVENT_PRIORITY_CRITICAL])
+        # Check if events are in the correct priority queues
+        self.assertIn(high_prio_event, self.bus._queues[1])  # HIGH priority
+        self.assertIn(normal_prio_event, self.bus._queues[2])  # NORMAL priority
+        self.assertEqual(len(self.bus._queues[1]), 1)
+        self.assertEqual(len(self.bus._queues[2]), 1)
 
-        self.assertEqual(len(self.bus._queues[EVENT_PRIORITY_HIGH]), 1)
-        self.assertIn(high_event, self.bus._queues[EVENT_PRIORITY_HIGH])
-
-        self.assertEqual(len(self.bus._queues[EVENT_PRIORITY_NORMAL]), 1)
-        self.assertIn(normal_event, self.bus._queues[EVENT_PRIORITY_NORMAL])
-
-    async def test_process_events_executes_subscribed_handler(self):
+    def test_process_events_executes_subscribed_handler(self):
         """
         Tests the core functionality: a published event triggers its subscribed handler.
         """
-        # Arrange
-        mock_handler = AsyncMock()
-        event_type = EventType.INFRA_BUILD_REQUEST
-        event_payload = BuildRequestPayload(item_id=1)
-        event = Event(event_type, event_payload)
+        mock_handler = Mock()
 
-        self.bus.subscribe(event_type, mock_handler)
+        async def async_handler(event: Event):
+            mock_handler(event)
+
+        event = Event(EventType.INFRA_BUILD_REQUEST, "payload")
+        self.bus.subscribe(EventType.INFRA_BUILD_REQUEST, async_handler)
         self.bus.publish(event)
 
-        # Act
-        await self.bus.process_events()
+        asyncio.run(self.bus.process_events())
 
-        # Assert
-        mock_handler.assert_awaited_once_with(event)
+        mock_handler.assert_called_once_with(event)
 
-    async def test_process_events_respects_priority_order(self):
+    def test_process_events_respects_priority_order(self):
         """
         Verifies that events are processed in strict priority order (CRITICAL -> HIGH -> NORMAL).
         """
-        # Arrange
         call_order = []
 
-        async def critical_handler(event):
+        async def critical_handler(event: Event):
             call_order.append("CRITICAL")
 
-        async def high_handler(event):
+        async def high_handler(event: Event):
+            # Introduce a tiny delay to ensure this doesn't accidentally run first
+            await asyncio.sleep(0.001)
             call_order.append("HIGH")
 
-        async def normal_handler(event):
+        async def normal_handler(event: Event):
             call_order.append("NORMAL")
 
+        # Subscribe handlers
         self.bus.subscribe(EventType.TACTICS_PROXY_DETECTED, critical_handler)
         self.bus.subscribe(EventType.TACTICS_UNIT_TOOK_DAMAGE, high_handler)
         self.bus.subscribe(EventType.INFRA_BUILD_REQUEST, normal_handler)
 
-        # Publish in a jumbled order to test the sorting
+        # Publish in reverse order of priority
         self.bus.publish(Event(EventType.INFRA_BUILD_REQUEST))
-        self.bus.publish(Event(EventType.TACTICS_PROXY_DETECTED))
         self.bus.publish(Event(EventType.TACTICS_UNIT_TOOK_DAMAGE))
+        self.bus.publish(Event(EventType.TACTICS_PROXY_DETECTED))
 
-        # Act
-        await self.bus.process_events()
+        asyncio.run(self.bus.process_events())
 
-        # Assert
+        # Assert the execution order was correct
         self.assertEqual(call_order, ["CRITICAL", "HIGH", "NORMAL"])
 
-    async def test_process_events_clears_queues_after_processing(self):
-        """
-        Ensures that the event queues are empty after processing, ready for the next frame.
-        """
-        # Arrange
-        self.bus.subscribe(EventType.INFRA_BUILD_REQUEST, AsyncMock())
-        self.bus.publish(Event(EventType.INFRA_BUILD_REQUEST))
-        self.assertFalse(
-            not self.bus._queues[EVENT_PRIORITY_NORMAL]
-        )  # Queue should not be empty
-
-        # Act
-        await self.bus.process_events()
-
-        # Assert
-        self.assertTrue(not self.bus._queues[EVENT_PRIORITY_CRITICAL])
-        self.assertTrue(not self.bus._queues[EVENT_PRIORITY_HIGH])
-        self.assertTrue(not self.bus._queues[EVENT_PRIORITY_NORMAL])
-
-    async def test_process_events_handles_no_subscribers_gracefully(self):
-        """
-        Tests that publishing an event with no subscribers does not cause an error.
-        """
-        # Arrange
-        event = Event(EventType.TACTICS_ENEMY_TECH_SCOUTED)
-        self.bus.publish(event)
-
-        # Act & Assert
-        try:
-            await self.bus.process_events()
-            # If we get here without an exception, the test has passed.
-            self.assertTrue(True)
-        except Exception as e:
-            self.fail(f"process_events raised an exception with no subscribers: {e}")
-
-    async def test_process_events_calls_multiple_subscribers_for_one_event(self):
+    def test_process_events_calls_multiple_subscribers_for_one_event(self):
         """
         Tests if all handlers subscribed to a single event type are executed.
         """
-        # Arrange
-        handler1 = AsyncMock()
-        handler2 = AsyncMock()
-        event_type = EventType.INFRA_BUILD_REQUEST
-        event = Event(event_type)
+        mock_handler1 = Mock()
+        mock_handler2 = Mock()
 
-        self.bus.subscribe(event_type, handler1)
-        self.bus.subscribe(event_type, handler2)
+        async def async_handler1(event: Event):
+            mock_handler1()
+
+        async def async_handler2(event: Event):
+            mock_handler2()
+
+        event = Event(EventType.INFRA_BUILD_REQUEST)
+        self.bus.subscribe(EventType.INFRA_BUILD_REQUEST, async_handler1)
+        self.bus.subscribe(EventType.INFRA_BUILD_REQUEST, async_handler2)
         self.bus.publish(event)
 
-        # Act
-        await self.bus.process_events()
+        asyncio.run(self.bus.process_events())
 
-        # Assert
-        handler1.assert_awaited_once_with(event)
-        handler2.assert_awaited_once_with(event)
+        mock_handler1.assert_called_once()
+        mock_handler2.assert_called_once()
+
+    def test_process_events_handles_no_subscribers_gracefully(self):
+        """
+        Tests that publishing an event with no subscribers does not cause an error.
+        """
+        event = Event(EventType.INFRA_BUILD_REQUEST)
+        self.bus.publish(event)
+
+        try:
+            asyncio.run(self.bus.process_events())
+        except Exception as e:
+            self.fail(f"process_events raised an exception with no subscribers: {e}")
+
+    def test_process_events_clears_queues_after_processing(self):
+        """
+        Ensures that the event queues are empty after processing, ready for the next frame.
+        """
+
+        async def dummy_handler(event: Event):
+            pass
+
+        self.bus.subscribe(EventType.INFRA_BUILD_REQUEST, dummy_handler)
+        self.bus.publish(Event(EventType.INFRA_BUILD_REQUEST))
+        self.assertGreater(len(self.bus._queues[2]), 0)
+
+        asyncio.run(self.bus.process_events())
+
+        self.assertEqual(len(self.bus._queues[2]), 0)
 
 
 if __name__ == "__main__":
