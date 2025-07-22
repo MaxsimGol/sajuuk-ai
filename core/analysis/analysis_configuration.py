@@ -14,6 +14,7 @@ from core.analysis.expansion_analyzer import ExpansionAnalyzer
 from core.analysis.known_enemy_townhall_analyzer import KnownEnemyTownhallAnalyzer
 from core.analysis.threat_map_analyzer import ThreatMapAnalyzer
 from core.analysis.units_analyzer import UnitsAnalyzer
+from core.analysis.base_threat_analyzer import BaseThreatAnalyzer
 
 # --- Task Configuration ---
 
@@ -26,6 +27,7 @@ PRE_ANALYSIS_TASK_CLASSES: List[Type[AnalysisTask]] = [
 # HIGH_FREQUENCY: Run one task per frame in a round-robin cycle.
 # For lightweight tasks that need to be reasonably fresh.
 HIGH_FREQUENCY_TASK_CLASSES: List[Type[AnalysisTask]] = [
+    BaseThreatAnalyzer,
     FriendlyArmyValueAnalyzer,
     EnemyArmyValueAnalyzer,
 ]

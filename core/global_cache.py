@@ -30,6 +30,7 @@ class GlobalCache:
         # Raw Perceived State
         self.bot: "BotAI" | None = None
         self.game_loop: int = 0
+        self.iteration: int = 0  # NEW: Add iteration to the cache
         self.minerals: int = 0
         self.vespene: int = 0
         self.supply_left: int = 0
@@ -47,6 +48,8 @@ class GlobalCache:
         self.friendly_army_units: Units | None = None
         self.idle_production_structures: Units | None = None
         self.threat_map: np.ndarray | None = None
+        self.base_is_under_attack: bool = False
+        self.threat_location: "Point2" | None = None
         self.friendly_army_value: int = 0
         self.enemy_army_value: int = 0
         self.known_enemy_units: Units | None = None
@@ -56,7 +59,8 @@ class GlobalCache:
         self.occupied_locations: set[Point2] = set()
         self.enemy_occupied_locations: set[Point2] = set()
 
-    def update(self, bot: "BotAI", analyzer: "GameAnalyzer"):
+    # CHANGED: Added 'iteration' to the method signature
+    def update(self, bot: "BotAI", analyzer: "GameAnalyzer", iteration: int):
         """Populates the cache from the raw bot state and the GameAnalyzer."""
         if self.bot is None:
             self.bot = bot
@@ -64,6 +68,7 @@ class GlobalCache:
 
         # --- Copy Raw Perceived State ---
         self.game_loop = bot.state.game_loop
+        self.iteration = iteration  # NEW: Store the current iteration
         self.minerals = bot.minerals
         self.vespene = bot.vespene
         self.supply_used = bot.supply_used
@@ -80,6 +85,8 @@ class GlobalCache:
         self.friendly_army_units = analyzer.friendly_army_units
         self.idle_production_structures = analyzer.idle_production_structures
         self.threat_map = analyzer.threat_map
+        self.base_is_under_attack = getattr(analyzer, "base_is_under_attack", False)
+        self.threat_location = getattr(analyzer, "threat_location", None)
         self.friendly_army_value = analyzer.friendly_army_value
         self.enemy_army_value = analyzer.enemy_army_value
         self.known_enemy_units = analyzer.known_enemy_units

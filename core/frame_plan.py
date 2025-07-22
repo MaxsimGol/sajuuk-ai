@@ -1,6 +1,8 @@
 from __future__ import annotations
 from enum import Enum, auto
 from dataclasses import dataclass, field
+from sc2.ids.unit_typeid import UnitTypeId
+from sc2.ids.upgrade_id import UpgradeId
 
 # --- Data Structures for Intentions ---
 
@@ -33,9 +35,6 @@ class ResourceBudget:
     tactics: int = 0  # e.g., for paid scouting like changelings
 
 
-# --- The FramePlan Class ---
-
-
 class FramePlan:
     """
     An ephemeral "scratchpad" for the current frame's strategic intentions.
@@ -57,6 +56,16 @@ class FramePlan:
         self.army_stance: ArmyStance = ArmyStance.DEFENSIVE
 
         self.economic_stance: EconomicStance = EconomicStance.NORMAL
+
+        # --- CAPABILITY GOALS ---
+        # A dictionary defining the desired army composition.
+        self.unit_composition_goal: dict[UnitTypeId, int] = field(default_factory=dict)
+
+        # A set of all tech structures the bot wants to build this frame.
+        self.tech_goals: set[UnitTypeId] = field(default_factory=set)
+
+        # A prioritized list of upgrades the bot wants to research.
+        self.upgrade_goal: list[UpgradeId] = field(default_factory=list)
         # A set of high-priority production requests for the frame.
         self.production_requests: set[object] = set()
 

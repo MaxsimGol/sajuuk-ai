@@ -1,13 +1,11 @@
-# core/utilities/geometry.py
-
 import math
 from typing import TYPE_CHECKING, Set
 
 import numpy as np
 
-# This block was missing. It provides the definitions for type hints.
+from sc2.position import Point2
+
 if TYPE_CHECKING:
-    from sc2.position import Point2
     from sc2.units import Units
 
 

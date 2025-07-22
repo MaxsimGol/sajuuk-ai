@@ -37,12 +37,10 @@ class SupplyManager(Manager):
         """
         Checks supply and requests a new Supply Depot if needed.
         """
-        # Don't request depots if we are at max supply
         if cache.supply_cap >= 200:
             return []
 
-        # Check if a Supply Depot is already in production or queued by a worker
-        # We check for pending depots + depots in construction
+        # Check for pending depots + depots in construction to avoid over-building.
         if (
             self.bot.already_pending(UnitTypeId.SUPPLYDEPOT)
             + self.bot.structures(UnitTypeId.SUPPLYDEPOT).not_ready.amount
@@ -50,13 +48,10 @@ class SupplyManager(Manager):
         ):
             return []
 
-        # --- Adjust buffer based on economic stance ---
         required_buffer = 0
         if plan.economic_stance == EconomicStance.SAVING_FOR_EXPANSION:
-            # While saving for a big purchase, only build a depot in an emergency.
             required_buffer = 2
         else:
-            # Normal dynamic buffer calculation
             num_production_structures = cache.friendly_structures.of_type(
                 TERRAN_PRODUCTION_TYPES
             ).amount
@@ -65,30 +60,29 @@ class SupplyManager(Manager):
                 + num_production_structures * SUPPLY_BUFFER_PER_PRODUCTION_STRUCTURE
             )
 
-        # If supply is low, publish a high-priority build request
         if cache.supply_left < required_buffer:
-            # --- NEW: Smarter Placement Logic ---
-            placement_pos = None
-            main_th = cache.bot.townhalls.ready.first
-            if main_th:
-                # Find mineral fields for the main base
-                mineral_fields = cache.bot.mineral_field.closer_than(10, main_th)
-                if mineral_fields:
-                    # Calculate a point "behind" the townhall, away from the minerals
-                    # Vector from mineral center to townhall center, then extend it outwards
+            # --- CORRECTED: Smarter and Safer Placement Logic ---
+            placement_pos = self.bot.start_location  # Default fallback
+
+            # CRITICAL CHECK: Ensure a ready townhall exists before trying to access it.
+            ready_townhalls = self.bot.townhalls.ready
+            if ready_townhalls.exists:
+                main_th = ready_townhalls.first
+                mineral_fields = self.bot.mineral_field.closer_than(10, main_th)
+                if mineral_fields.exists:
+                    # Calculate a point "behind" the townhall, away from the minerals.
                     placement_pos = main_th.position.towards(mineral_fields.center, -8)
-            # --- END: Smarter Placement Logic ---
+            # --- END CORRECTION ---
 
             payload = BuildRequestPayload(
                 item_id=UnitTypeId.SUPPLYDEPOT,
-                position=placement_pos,  # Pass the calculated position
+                position=placement_pos,
                 priority=EVENT_PRIORITY_HIGH,
                 unique=True,
             )
             bus.publish(Event(EventType.INFRA_BUILD_REQUEST, payload))
             cache.logger.info(
-                f"Supply low. Requesting SUPPLYDEPOT near {placement_pos.rounded if placement_pos else 'default'}"
+                f"Supply low. Requesting SUPPLYDEPOT near {placement_pos.rounded}"
             )
 
-        # This manager only publishes events, it does not issue commands
         return []
