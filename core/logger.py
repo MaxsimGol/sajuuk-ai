@@ -31,6 +31,14 @@ def sajuuk_project_filter(record):
     )
 
 
+def is_external_filter(record):
+    """
+    This filter returns True for logs that are NOT from the Sajuuk project.
+    It's the inverse of the sajuuk_project_filter.
+    """
+    return not sajuuk_project_filter(record)
+
+
 # --- START: MODIFIED LOGGING SETUP ---
 logger.remove()
 
@@ -56,4 +64,11 @@ logger.add(
 
 # 4. (Optional) Add your clean console logger
 logger.add(stdout, level="WARNING", filter=sajuuk_project_filter)
+logger.add(
+    stdout,
+    level="INFO",  # Set to INFO or DEBUG to see more detail from the library
+    filter=is_external_filter,
+    backtrace=True,  # Ensure tracebacks are always shown for this handler
+    diagnose=True,
+)
 logger.info(f"Sajuuk logger initialized. Log file: {log_file_path}")

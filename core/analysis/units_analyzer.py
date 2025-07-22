@@ -43,9 +43,7 @@ class UnitsAnalyzer(AnalysisTask):
         all_friendly_units = bot.units
 
         analyzer.friendly_units = all_friendly_units
-        analyzer.friendly_structures = all_friendly_units.filter(
-            lambda u: u.is_structure
-        )
+        analyzer.friendly_structures = bot.structures
         analyzer.friendly_workers = all_friendly_units.filter(
             lambda u: u.type_id in WORKER_TYPES
         )

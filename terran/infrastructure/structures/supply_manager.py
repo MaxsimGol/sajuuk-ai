@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, List
 from sc2.ids.unit_typeid import UnitTypeId
 
 from core.interfaces.manager_abc import Manager
+from core.frame_plan import EconomicStance
 from core.types import CommandFunctor
 from core.utilities.events import Event, EventType, BuildRequestPayload
 from core.utilities.constants import (
@@ -41,24 +42,53 @@ class SupplyManager(Manager):
             return []
 
         # Check if a Supply Depot is already in production or queued by a worker
-        if self.bot.already_pending(UnitTypeId.SUPPLYDEPOT) > 0:
+        # We check for pending depots + depots in construction
+        if (
+            self.bot.already_pending(UnitTypeId.SUPPLYDEPOT)
+            + self.bot.structures(UnitTypeId.SUPPLYDEPOT).not_ready.amount
+            > 0
+        ):
             return []
 
-        # Calculate the required supply buffer
-        num_production_structures = cache.friendly_structures.of_type(
-            TERRAN_PRODUCTION_TYPES
-        ).amount
-        required_buffer = (
-            SUPPLY_BUFFER_BASE
-            + num_production_structures * SUPPLY_BUFFER_PER_PRODUCTION_STRUCTURE
-        )
+        # --- Adjust buffer based on economic stance ---
+        required_buffer = 0
+        if plan.economic_stance == EconomicStance.SAVING_FOR_EXPANSION:
+            # While saving for a big purchase, only build a depot in an emergency.
+            required_buffer = 2
+        else:
+            # Normal dynamic buffer calculation
+            num_production_structures = cache.friendly_structures.of_type(
+                TERRAN_PRODUCTION_TYPES
+            ).amount
+            required_buffer = (
+                SUPPLY_BUFFER_BASE
+                + num_production_structures * SUPPLY_BUFFER_PER_PRODUCTION_STRUCTURE
+            )
 
         # If supply is low, publish a high-priority build request
         if cache.supply_left < required_buffer:
+            # --- NEW: Smarter Placement Logic ---
+            placement_pos = None
+            main_th = cache.bot.townhalls.ready.first
+            if main_th:
+                # Find mineral fields for the main base
+                mineral_fields = cache.bot.mineral_field.closer_than(10, main_th)
+                if mineral_fields:
+                    # Calculate a point "behind" the townhall, away from the minerals
+                    # Vector from mineral center to townhall center, then extend it outwards
+                    placement_pos = main_th.position.towards(mineral_fields.center, -8)
+            # --- END: Smarter Placement Logic ---
+
             payload = BuildRequestPayload(
-                item_id=UnitTypeId.SUPPLYDEPOT, priority=EVENT_PRIORITY_HIGH
+                item_id=UnitTypeId.SUPPLYDEPOT,
+                position=placement_pos,  # Pass the calculated position
+                priority=EVENT_PRIORITY_HIGH,
+                unique=True,
             )
             bus.publish(Event(EventType.INFRA_BUILD_REQUEST, payload))
+            cache.logger.info(
+                f"Supply low. Requesting SUPPLYDEPOT near {placement_pos.rounded if placement_pos else 'default'}"
+            )
 
         # This manager only publishes events, it does not issue commands
         return []

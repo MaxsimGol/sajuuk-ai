@@ -33,6 +33,15 @@ class ConstructionManager(Manager):
     async def handle_build_request(self, event: Event):
         """Event handler that adds a new build request to the queue."""
         payload: BuildRequestPayload = event.payload
+        if payload.unique:
+            is_duplicate = any(
+                req.item_id == payload.item_id for req in self.build_queue
+            )
+            if is_duplicate:
+                self.bot.global_cache.logger.debug(
+                    f"Ignoring duplicate build request for unique item: {payload.item_id.name}"
+                )
+                return
         self.build_queue.append(payload)
 
     async def execute(

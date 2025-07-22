@@ -42,14 +42,16 @@ class SCVManager(Manager):
             current_worker_count + pending_worker_count < worker_target
             and self.bot.can_afford(UnitTypeId.SCV)
         ):
-            # FIX: Check for townhalls that are ready and have queue space, not just idle.
-            # A townhall without a reactor can queue 1 unit at a time.
+            # Check for townhalls that are ready and have queue space
             producible_townhalls: Units = cache.friendly_structures.of_type(
                 terran_townhalls
             ).ready.filter(lambda th: len(th.orders) < 1)
 
             if producible_townhalls.exists:
                 th = producible_townhalls.first
+                cache.logger.debug(
+                    f"Training SCV from {th.type_id} at {th.position.rounded}"
+                )
                 actions.append(lambda: th.train(UnitTypeId.SCV))
 
         # --- 2. Worker Assignment to Undersaturated Bases ---
@@ -73,8 +75,8 @@ class SCVManager(Manager):
 
             local_minerals = self.bot.mineral_field.closer_than(10, target_th)
             if local_minerals.exists:
-                target_mineral = local_minerals.sorted_by(
-                    lambda mf: mf.assigned_harvesters
+                target_mineral = local_minerals.sorted(
+                    key=lambda mf: mf.assigned_harvesters
                 ).first
                 actions.append(lambda w=worker, m=target_mineral: w.gather(m))
 

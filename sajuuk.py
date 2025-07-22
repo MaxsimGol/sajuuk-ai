@@ -59,6 +59,9 @@ class Sajuuk(BotAI):
         )
 
     async def on_step(self, iteration: int):
+        if iteration % 100 == 0:
+            # print(self.units)
+            pass
         # --- Bind game time to the logger for this entire step ---
         game_time = self.time_formatted
         log = self.logger.bind(game_time=game_time)

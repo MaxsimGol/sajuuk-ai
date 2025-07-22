@@ -13,6 +13,14 @@ class ArmyStance(Enum):
     HARASS = auto()
 
 
+class EconomicStance(Enum):
+    """Defines the high-level economic goal for the frame."""
+
+    NORMAL = auto()  # Default behavior, spend as resources become available.
+    SAVING_FOR_EXPANSION = auto()  # Prioritize saving for a new base.
+    SAVING_FOR_TECH = auto()  # Prioritize saving for a key tech structure.
+
+
 @dataclass
 class ResourceBudget:
     """
@@ -48,6 +56,7 @@ class FramePlan:
         # The tactical plan set by the TacticalDirector.
         self.army_stance: ArmyStance = ArmyStance.DEFENSIVE
 
+        self.economic_stance: EconomicStance = EconomicStance.NORMAL
         # A set of high-priority production requests for the frame.
         self.production_requests: set[object] = set()
 
@@ -70,6 +79,13 @@ class FramePlan:
         Called by the TacticalDirector.
         """
         self.army_stance = stance
+
+    def set_economic_stance(self, stance: EconomicStance):
+        """
+        Sets the bot's economic focus for the frame.
+        Called by the InfrastructureDirector.
+        """
+        self.economic_stance = stance
 
     def add_production_request(self, request: object):
         """

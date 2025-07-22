@@ -68,6 +68,7 @@ class BuildRequestPayload(Payload):
     item_id: "UnitTypeId"
     position: "Point2" | None = None
     priority: int = EVENT_PRIORITY_NORMAL
+    unique: bool = False
 
 
 @dataclass
