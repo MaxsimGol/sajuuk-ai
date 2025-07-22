@@ -42,7 +42,6 @@ class ResearchManager(Manager):
 
         for upgrade_id in upgrade_priority_list:
             # 1. Check if the upgrade is already complete or in progress.
-            # a value > 0 means it's either in progress or complete.
             if self.bot.already_pending_upgrade(upgrade_id) > 0:
                 continue
 
@@ -59,19 +58,22 @@ class ResearchManager(Manager):
                 continue
 
             # 4. Find an available building to start the research.
-            # Get all completed buildings of the required type.
             available_buildings = cache.friendly_structures.of_type(
                 research_structure_type
             ).ready
 
-            # Prioritize using a truly idle building. If none are idle,
-            # select the first available (busy) one to queue the research.
-            building_to_use = available_buildings.idle.first_or(
-                available_buildings.first
-            )
-
-            if not building_to_use:
+            if not available_buildings.exists:
                 continue  # No ready building of the required type is available.
+
+            # --- MODIFICATION: Replace 'first_or' with standard if/else logic ---
+            idle_buildings = available_buildings.idle
+            if idle_buildings.exists:
+                # Prioritize using a truly idle building.
+                building_to_use = idle_buildings.first
+            else:
+                # If no idle buildings, select the first available (busy) one to queue the research.
+                building_to_use = available_buildings.first
+            # --- END MODIFICATION ---
 
             # 5. Check for tech prerequisites (e.g., Armory for Level 2 upgrades).
             research_details = RESEARCH_INFO.get(research_structure_type, {}).get(
@@ -89,8 +91,6 @@ class ResearchManager(Manager):
             cache.logger.info(
                 f"Starting research for {upgrade_id.name} at {building_to_use.type_id.name}."
             )
-            # We return immediately to ensure only one research is started per frame.
             return [lambda b=building_to_use, u=upgrade_id: b.research(u)]
 
-        # If the loop completes, no upgrades could be started this frame.
         return []

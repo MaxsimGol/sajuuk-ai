@@ -26,18 +26,21 @@ class ConstructionManager(Manager):
         super().__init__(bot)
         self.build_queue: List[BuildRequestPayload] = []
         # Subscribe to build requests from the event bus
-        bot.event_bus.subscribe(
-            EventType.INFRA_BUILD_REQUEST, self.handle_build_request
-        )
+        bus = getattr(bot, "event_bus", None)
+        if bus:
+            bus.subscribe(EventType.INFRA_BUILD_REQUEST, self.handle_build_request)
 
     async def handle_build_request(self, event: Event):
         """Event handler that adds a new build request to the queue."""
         payload: BuildRequestPayload = event.payload
         if payload.unique:
-            is_duplicate = any(
+            # Check for pending buildings of the same type AND requests in our queue
+            is_duplicate_in_queue = any(
                 req.item_id == payload.item_id for req in self.build_queue
             )
-            if is_duplicate:
+            is_already_pending = self.bot.already_pending(payload.item_id) > 0
+
+            if is_duplicate_in_queue or is_already_pending:
                 self.bot.global_cache.logger.debug(
                     f"Ignoring duplicate build request for unique item: {payload.item_id.name}"
                 )
@@ -71,10 +74,11 @@ class ConstructionManager(Manager):
 
         # --- Special logic for Gas Buildings ---
         if request.item_id in gas_buildings:
-            # Find an unoccupied geyser near the requested position or any townhall.
             search_point = request.position or self.bot.start_location
             geysers = self.bot.vespene_geyser.filter(
-                lambda g: not self.bot.structures.closer_than(1.0, g).exists()
+                # --- THIS IS THE CORRECTED LINE ---
+                # Changed .exists() to .exists
+                lambda g: not self.bot.structures.closer_than(1.0, g).exists
             )
             if geysers.exists:
                 geyser = geysers.closest_to(search_point)

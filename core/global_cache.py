@@ -30,45 +30,56 @@ class GlobalCache:
         # Raw Perceived State
         self.bot: "BotAI" | None = None
         self.game_loop: int = 0
-        self.iteration: int = 0  # NEW: Add iteration to the cache
+        self.iteration: int = 0
         self.minerals: int = 0
         self.vespene: int = 0
         self.supply_left: int = 0
         self.supply_cap: int = 0
         self.supply_used: int = 0
-        self.friendly_upgrades: set["UpgradeId"] | None = None
-        self.enemy_units: "Units" | None = None
-        self.enemy_structures: "Units" | None = None
+        self.friendly_upgrades: set["UpgradeId"] = set()
+        self.enemy_units: "Units" | None = None  # Can be None if no bot object yet
+        self.enemy_structures: "Units" | None = None  # Can be None if no bot object yet
         self.map_ramps: list["Ramp"] | None = None
 
         # Analyzed State (Copied from GameAnalyzer)
-        self.friendly_units: Units | None = None
-        self.friendly_structures: Units | None = None
-        self.friendly_workers: Units | None = None
-        self.friendly_army_units: Units | None = None
-        self.idle_production_structures: Units | None = None
+        # MODIFICATION: Initialize with empty values, will be populated on first update
+        self.friendly_units: "Units" | None = None
+        self.friendly_structures: "Units" | None = None
+        self.friendly_workers: "Units" | None = None
+        self.friendly_army_units: "Units" | None = None
+        self.idle_production_structures: "Units" | None = None
         self.threat_map: np.ndarray | None = None
         self.base_is_under_attack: bool = False
         self.threat_location: "Point2" | None = None
         self.friendly_army_value: int = 0
         self.enemy_army_value: int = 0
-        self.known_enemy_units: Units | None = None
-        self.known_enemy_structures: Units | None = None
-        self.known_enemy_townhalls: Units | None = None
+        self.known_enemy_units: "Units" | None = None
+        self.known_enemy_structures: "Units" | None = None
+        self.known_enemy_townhalls: "Units" | None = None
         self.available_expansion_locations: set[Point2] = set()
         self.occupied_locations: set[Point2] = set()
         self.enemy_occupied_locations: set[Point2] = set()
 
-    # CHANGED: Added 'iteration' to the method signature
     def update(self, bot: "BotAI", analyzer: "GameAnalyzer", iteration: int):
         """Populates the cache from the raw bot state and the GameAnalyzer."""
         if self.bot is None:
             self.bot = bot
             self.map_ramps = self.bot.game_info.map_ramps
+            # Initialize empty units objects here where 'bot' is available
+            self.friendly_units = Units([], bot)
+            self.friendly_structures = Units([], bot)
+            self.friendly_workers = Units([], bot)
+            self.friendly_army_units = Units([], bot)
+            self.idle_production_structures = Units([], bot)
+            self.known_enemy_units = Units([], bot)
+            self.known_enemy_structures = Units([], bot)
+            self.known_enemy_townhalls = Units([], bot)
+            self.enemy_units = Units([], bot)
+            self.enemy_structures = Units([], bot)
 
         # --- Copy Raw Perceived State ---
         self.game_loop = bot.state.game_loop
-        self.iteration = iteration  # NEW: Store the current iteration
+        self.iteration = iteration
         self.minerals = bot.minerals
         self.vespene = bot.vespene
         self.supply_used = bot.supply_used

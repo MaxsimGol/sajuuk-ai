@@ -1,3 +1,4 @@
+# terran/capabilities/capability_director.py
 from __future__ import annotations
 from typing import TYPE_CHECKING, List, Dict
 
@@ -18,14 +19,29 @@ if TYPE_CHECKING:
     from core.event_bus import EventBus
     from core.frame_plan import FramePlan
 
+# --- Strategic Production Configuration ---
+TARGET_ARMY_SUPPLY_CAP: Dict[int, int] = {1: 40, 2: 100, 3: 160, 4: 180}
+TARGET_UNIT_RATIOS: Dict[UnitTypeId, float] = {
+    UnitTypeId.MARINE: 0.60,
+    UnitTypeId.MARAUDER: 0.20,
+    UnitTypeId.MEDIVAC: 0.10,
+    UnitTypeId.SIEGETANK: 0.05,
+    UnitTypeId.VIKINGFIGHTER: 0.05,
+}
+UPGRADE_PRIORITY_PATH: List[UpgradeId] = [
+    UpgradeId.STIMPACK,
+    UpgradeId.SHIELDWALL,
+    UpgradeId.TERRANINFANTRYWEAPONSLEVEL1,
+    UpgradeId.TERRANINFANTRYARMORSLEVEL1,
+    UpgradeId.TERRANINFANTRYWEAPONSLEVEL2,
+    UpgradeId.TERRANVEHICLEWEAPONSLEVEL1,
+    UpgradeId.TERRANINFANTRYARMORSLEVEL2,
+    UpgradeId.TERRANINFANTRYWEAPONSLEVEL3,
+    UpgradeId.TERRANINFANTRYARMORSLEVEL3,
+]
+
 
 class CapabilityDirector(Director):
-    """
-    The Quartermaster. Plans all production and technology.
-    This director now uses a target-based system to define the desired
-    number of tech buildings, allowing for parallel and scalable construction goals.
-    """
-
     def __init__(self, bot: "BotAI"):
         super().__init__(bot)
         self.army_unit_manager = ArmyUnitManager(bot)
@@ -38,29 +54,40 @@ class CapabilityDirector(Director):
             self.research_manager,
             self.army_unit_manager,
         ]
-
-        # --- Desired Tech Tree Targets ---
-        # Defines the target count for each structure based on number of bases.
         self.tech_tree_targets: Dict[int, Dict[UnitTypeId, int]] = {
-            1: {  # On 1 base
+            1: {
                 UnitTypeId.BARRACKS: 1,
                 UnitTypeId.FACTORY: 1,
                 UnitTypeId.ENGINEERINGBAY: 1,
             },
-            2: {  # On 2 bases
+            2: {
                 UnitTypeId.BARRACKS: 3,
                 UnitTypeId.FACTORY: 1,
                 UnitTypeId.STARPORT: 1,
                 UnitTypeId.ENGINEERINGBAY: 1,
                 UnitTypeId.ARMORY: 1,
             },
-            3: {  # On 3+ bases
+            3: {
                 UnitTypeId.BARRACKS: 5,
-                UnitTypeId.FACTORY: 1,
-                UnitTypeId.STARPORT: 2,
-                UnitTypeId.ENGINEERINGBAY: 2,
+                UnitTypeId.FACTORY: 2,
+                UnitTypeId.STARPORT: 1,
+                UnitTypeId.ENGINEERINGBAY: 1,
                 UnitTypeId.ARMORY: 1,
-                UnitTypeId.FUSIONCORE: 1,
+            },
+        }
+        self.addon_targets: Dict[int, Dict[UnitTypeId, int]] = {
+            1: {UnitTypeId.BARRACKSTECHLAB: 1, UnitTypeId.FACTORYTECHLAB: 1},
+            2: {
+                UnitTypeId.BARRACKSTECHLAB: 1,
+                UnitTypeId.BARRACKSREACTOR: 2,
+                UnitTypeId.FACTORYTECHLAB: 1,
+                UnitTypeId.STARPORTTECHLAB: 1,
+            },
+            3: {
+                UnitTypeId.BARRACKSTECHLAB: 2,
+                UnitTypeId.BARRACKSREACTOR: 3,
+                UnitTypeId.FACTORYTECHLAB: 1,
+                UnitTypeId.STARPORTTECHLAB: 1,
             },
         }
 
@@ -75,27 +102,20 @@ class CapabilityDirector(Director):
         return actions
 
     def _set_production_goals(self, cache: "GlobalCache", plan: "FramePlan"):
-        """
-        Determines ALL immediate production needs and writes them to the FramePlan.
-        """
+        num_bases = self.bot.townhalls.amount
         s = cache.friendly_structures
         p = self.bot.already_pending
 
-        # --- Unit Composition Goal ---
-        plan.unit_composition_goal = {
-            UnitTypeId.MARINE: 20,
-            UnitTypeId.MARAUDER: 5,
-            UnitTypeId.MEDIVAC: 3,
-            UnitTypeId.VIKINGFIGHTER: 2,
-            UnitTypeId.SIEGETANK: 2,
-        }
+        target_army_supply = TARGET_ARMY_SUPPLY_CAP.get(num_bases, 180)
+        plan.unit_composition_goal = self._calculate_unit_deficits(
+            target_army_supply, cache
+        )
 
-        # --- Tech Structure Goals ---
-        num_bases = self.bot.townhalls.amount
-        target_counts = self.tech_tree_targets.get(num_bases, self.tech_tree_targets[3])
-
+        target_structs = self.tech_tree_targets.get(
+            num_bases, self.tech_tree_targets[3]
+        )
         plan.tech_goals = set()
-        for building_id, target_count in target_counts.items():
+        for building_id, target_count in target_structs.items():
             current_count = s.of_type(building_id).amount + p(building_id)
             if (
                 current_count < target_count
@@ -103,50 +123,65 @@ class CapabilityDirector(Director):
             ):
                 plan.tech_goals.add(building_id)
 
-        # --- Upgrade Goals ---
-        plan.upgrade_goal = self._get_upgrade_priorities(cache)
+        plan.upgrade_goal = self._get_next_upgrade_and_tech(cache, plan)
 
-    def _get_upgrade_priorities(self, cache: "GlobalCache") -> List[UpgradeId]:
-        """Calculates the prioritized list of upgrades to research."""
-        s = cache.friendly_structures
+        target_addons = self.addon_targets.get(num_bases, self.addon_targets[3])
+        setattr(plan, "addon_goal", target_addons)
+
+    def _calculate_unit_deficits(
+        self, target_army_supply: int, cache: "GlobalCache"
+    ) -> Dict[UnitTypeId, int]:
+        """Calculates the number of each unit needed to reach the target ratio."""
+        deficits = {}
+
+        # --- THIS IS THE CORRECTED LINE ---
+        # The 'Unit' object doesn't have supply_cost, we must get it from game_data via the unit's type_id.
+        current_army_supply = sum(
+            self.bot.game_data.units[u.type_id.value]._proto.food_required
+            for u in cache.friendly_army_units
+        )
+        # --- END OF FIX ---
+
+        if current_army_supply >= target_army_supply:
+            return {}
+
+        for unit_id, ratio in TARGET_UNIT_RATIOS.items():
+            unit_supply_cost = self.bot.game_data.units[
+                unit_id.value
+            ]._proto.food_required
+            if unit_supply_cost == 0:
+                continue
+
+            target_count = int(target_army_supply * ratio / unit_supply_cost)
+            current_count = cache.friendly_army_units(
+                unit_id
+            ).amount + self.bot.already_pending(unit_id)
+
+            if current_count < target_count:
+                deficits[unit_id] = target_count
+
+        return deficits
+
+    def _get_next_upgrade_and_tech(
+        self, cache: "GlobalCache", plan: "FramePlan"
+    ) -> List[UpgradeId]:
+        """Finds the next upgrade in the path and ensures its tech requirements are met."""
         upgrades = cache.friendly_upgrades
         p_up = self.bot.already_pending_upgrade
 
-        priority_list = []
+        for upgrade_id in UPGRADE_PRIORITY_PATH:
+            if upgrade_id not in upgrades and p_up(upgrade_id) == 0:
+                if upgrade_id in {
+                    UpgradeId.TERRANINFANTRYWEAPONSLEVEL2,
+                    UpgradeId.TERRANINFANTRYARMORSLEVEL2,
+                    UpgradeId.TERRANINFANTRYWEAPONSLEVEL3,
+                    UpgradeId.TERRANINFANTRYARMORSLEVEL3,
+                }:
+                    if not (
+                        cache.friendly_structures(UnitTypeId.ARMORY).ready.exists
+                        or self.bot.already_pending(UnitTypeId.ARMORY)
+                    ):
+                        plan.tech_goals.add(UnitTypeId.ARMORY)
 
-        # Stim and Shields are top priority
-        if s.of_type(UnitTypeId.BARRACKSTECHLAB).ready.exists:
-            if UpgradeId.STIMPACK not in upgrades and p_up(UpgradeId.STIMPACK) == 0:
-                priority_list.append(UpgradeId.STIMPACK)
-            if UpgradeId.SHIELDWALL not in upgrades and p_up(UpgradeId.SHIELDWALL) == 0:
-                priority_list.append(UpgradeId.SHIELDWALL)
-
-        # Infantry Weapons and Armor
-        if s.of_type(UnitTypeId.ENGINEERINGBAY).ready.exists:
-            if (
-                UpgradeId.TERRANINFANTRYWEAPONSLEVEL1 not in upgrades
-                and p_up(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1) == 0
-            ):
-                priority_list.append(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)
-            elif (
-                UpgradeId.TERRANINFANTRYARMORSLEVEL1 not in upgrades
-                and p_up(UpgradeId.TERRANINFANTRYARMORSLEVEL1) == 0
-            ):
-                priority_list.append(UpgradeId.TERRANINFANTRYARMORSLEVEL1)
-
-        # Add more logic for Level 2/3 upgrades which require an Armory
-        if s.of_type(UnitTypeId.ARMORY).ready.exists:
-            if (
-                UpgradeId.TERRANINFANTRYWEAPONSLEVEL1 in upgrades
-                and UpgradeId.TERRANINFANTRYWEAPONSLEVEL2 not in upgrades
-                and p_up(UpgradeId.TERRANINFANTRYWEAPONSLEVEL2) == 0
-            ):
-                priority_list.append(UpgradeId.TERRANINFANTRYWEAPONSLEVEL2)
-            if (
-                UpgradeId.TERRANINFANTRYARMORSLEVEL1 in upgrades
-                and UpgradeId.TERRANINFANTRYARMORSLEVEL2 not in upgrades
-                and p_up(UpgradeId.TERRANINFANTRYARMORSLEVEL2) == 0
-            ):
-                priority_list.append(UpgradeId.TERRANINFANTRYARMORSLEVEL2)
-
-        return priority_list
+                return [upgrade_id]
+        return []

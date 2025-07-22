@@ -28,6 +28,13 @@ class GameAnalyzer:
 
     def __init__(self, event_bus: EventBus):
         # --- Analytical State Attributes ---
+        # MODIFICATION: Initialize with empty Units objects instead of None
+        # This requires a bot_object reference, which we don't have here.
+        # We will initialize them as None and ensure the UnitsAnalyzer populates
+        # them with valid, empty Units objects on the first run.
+        # Let's add a placeholder for the bot object to create empty units.
+        self._bot_object_for_init = None  # Will be set on first run.
+
         self.friendly_army_value: int = 0
         self.enemy_army_value: int = 0
         self.friendly_units: Units | None = None
@@ -36,6 +43,8 @@ class GameAnalyzer:
         self.friendly_army_units: Units | None = None
         self.idle_production_structures: Units | None = None
         self.threat_map: np.ndarray | None = None
+        # known_enemy attributes must be handled carefully, as they are stateful.
+        # UnitsAnalyzer is responsible for their initialization and maintenance.
         self.known_enemy_units: Units | None = None
         self.known_enemy_structures: Units | None = None
         self.known_enemy_townhalls: Units | None = None
@@ -56,6 +65,19 @@ class GameAnalyzer:
         self._high_freq_index: int = 0
         self._low_freq_index: int = 0
 
+    def _initialize_empty_units(self, bot: "BotAI"):
+        """Initializes all unit collections with empty Units objects on the first run."""
+        if self._bot_object_for_init is None:
+            self._bot_object_for_init = bot
+            self.friendly_units = Units([], bot)
+            self.friendly_structures = Units([], bot)
+            self.friendly_workers = Units([], bot)
+            self.friendly_army_units = Units([], bot)
+            self.idle_production_structures = Units([], bot)
+            self.known_enemy_units = Units([], bot)
+            self.known_enemy_structures = Units([], bot)
+            self.known_enemy_townhalls = Units([], bot)
+
     def _instantiate_tasks(
         self, task_classes: List[type[AnalysisTask]], event_bus: EventBus
     ) -> List[AnalysisTask]:
@@ -66,7 +88,6 @@ class GameAnalyzer:
         tasks = []
         for TaskCls in task_classes:
             task = TaskCls()
-            # If the task has a subscription method, call it.
             if hasattr(task, "subscribe_to_events"):
                 subscribe_method = getattr(task, "subscribe_to_events")
                 if callable(subscribe_method):
@@ -76,6 +97,9 @@ class GameAnalyzer:
 
     def run(self, bot: "BotAI"):
         """Executes the full analysis pipeline for the current game frame."""
+        # Lazily initialize empty Units objects on the first run.
+        self._initialize_empty_units(bot)
+
         # STAGE 1: Pre-Analysis (every frame, guaranteed order)
         for task in self._pre_analysis_tasks:
             task.execute(self, bot)
@@ -91,6 +115,8 @@ class GameAnalyzer:
         # STAGE 3: Scheduled Low-Frequency Analysis (periodic)
         if self._low_freq_tasks and (
             bot.state.game_loop % LOW_FREQUENCY_TASK_RATE == 0
+            or bot.state.game_loop
+            < 10  # Run all low-freq tasks in the first few frames
         ):
             task_to_run = self._low_freq_tasks[self._low_freq_index]
             task_to_run.execute(self, bot)

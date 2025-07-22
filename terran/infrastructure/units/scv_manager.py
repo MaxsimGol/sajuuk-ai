@@ -43,7 +43,6 @@ class SCVManager(Manager):
             current_worker_count + pending_worker_count < worker_target
             and self.bot.can_afford(UnitTypeId.SCV)
         ):
-            # Check for townhalls that are ready and have queue space
             producible_townhalls: Units = cache.friendly_structures.of_type(
                 terran_townhalls
             ).ready.filter(lambda th: len(th.orders) < 1)
@@ -66,21 +65,29 @@ class SCVManager(Manager):
             lambda r: r.assigned_harvesters < SCVS_PER_GEYSER
         )
 
-        for refinery in unsaturated_refineries:
-            # Re-check for idle workers inside the loop
-            if not idle_workers:
-                break
-            # Assign workers until this refinery is saturated
-            while refinery.assigned_harvesters < SCVS_PER_GEYSER:
-                if not idle_workers:
-                    break
-                worker = idle_workers.closest_to(refinery)
-                actions.append(lambda w=worker, r=refinery: w.gather(r))
-                # Remove the worker from the pool to prevent re-assignment
-                idle_workers.remove(worker)
-                # This is a temporary client-side update to avoid re-assigning
-                # multiple workers to the same slot in the same frame.
-                refinery.assigned_harvesters += 1
+        if unsaturated_refineries.exists:
+            # Use a copy to safely modify the list of idle workers
+            workers_to_assign = idle_workers.copy()
+            for refinery in unsaturated_refineries:
+                if not workers_to_assign:
+                    break  # No more idle workers to assign
+
+                # Calculate how many workers are needed for this specific refinery
+                workers_needed = SCVS_PER_GEYSER - refinery.assigned_harvesters
+
+                # Take the closest available workers up to the number needed
+                num_to_assign = min(workers_needed, workers_to_assign.amount)
+                assigned_this_refinery = workers_to_assign.closest_n_units(
+                    refinery, num_to_assign
+                )
+
+                for worker in assigned_this_refinery:
+                    actions.append(lambda w=worker, r=refinery: w.gather(r))
+                    # Remove the worker from the pool available for this frame
+                    workers_to_assign.remove(worker)
+
+            # Update the main idle_workers pool with the remaining workers
+            idle_workers = workers_to_assign
 
         # --- 2b. Mineral Saturation (Remaining Workers) ---
         if not idle_workers:
@@ -95,16 +102,13 @@ class SCVManager(Manager):
         )
 
         for worker in idle_workers:
-            # If some bases are undersaturated, send there first.
             if unsaturated_townhalls.exists:
                 target_th = unsaturated_townhalls.closest_to(worker)
-            # Otherwise, just send to the nearest base.
             else:
                 target_th = all_townhalls.closest_to(worker)
 
             local_minerals = self.bot.mineral_field.closer_than(10, target_th)
             if local_minerals.exists:
-                # Find the mineral patch with the fewest workers assigned.
                 target_mineral = local_minerals.sorted(
                     key=lambda mf: mf.assigned_harvesters
                 ).first

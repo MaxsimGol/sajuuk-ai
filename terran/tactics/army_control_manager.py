@@ -1,3 +1,4 @@
+# terran/tactics/army_control_manager.py
 from __future__ import annotations
 from typing import TYPE_CHECKING, List, Dict, Set, Tuple
 
@@ -8,8 +9,8 @@ from sc2.position import Point2
 from core.interfaces.manager_abc import Manager
 from core.frame_plan import ArmyStance
 from core.types import CommandFunctor
+from .squad import Squad
 
-# Import the specialist micro-controllers
 from terran.specialists.micro.marine_controller import MarineController
 from terran.specialists.micro.medivac_controller import MedivacController
 from terran.specialists.micro.tank_controller import TankController
@@ -21,7 +22,6 @@ if TYPE_CHECKING:
     from core.event_bus import EventBus
     from core.frame_plan import FramePlan
 
-# Define which units belong to which squad type for automatic assignment.
 BIO_UNIT_TYPES = {
     UnitTypeId.MARINE,
     UnitTypeId.MARAUDER,
@@ -30,6 +30,7 @@ BIO_UNIT_TYPES = {
 }
 MECH_UNIT_TYPES = {
     UnitTypeId.SIEGETANK,
+    UnitTypeId.SIEGETANKSIEGED,
     UnitTypeId.HELLION,
     UnitTypeId.HELLIONTANK,
     UnitTypeId.CYCLONE,
@@ -47,19 +48,12 @@ SUPPORT_UNIT_TYPES = {UnitTypeId.MEDIVAC, UnitTypeId.RAVEN}
 class ArmyControlManager(Manager):
     """
     Field Commander.
-
-    This manager orchestrates the army's high-level movements and actions.
-    It translates the TacticalDirector's plan (stance and target) into concrete
-    squad-based commands, delegating the complex micro-management to specialist
-    controllers.
+    Orchestrates the army by managing dynamic squads and delegating control.
     """
 
     def __init__(self, bot: "BotAI"):
         super().__init__(bot)
-        # Squads are stateful, stored as a dictionary mapping a squad name to a Units object.
-        self.squads: Dict[str, Units] = {}
-
-        # Instantiate micro-controllers once to maintain their state if needed.
+        self.squads: Dict[str, Squad] = {}
         self.marine_controller = MarineController()
         self.medivac_controller = MedivacController()
         self.tank_controller = TankController()
@@ -67,144 +61,127 @@ class ArmyControlManager(Manager):
     async def execute(
         self, cache: "GlobalCache", plan: "FramePlan", bus: "EventBus"
     ) -> List[CommandFunctor]:
-        """
-        Updates squads, determines targets based on stance, and delegates control.
-        """
-        # 1. Maintain Squads: Update unit membership based on new/dead units.
         self._update_squads(cache)
-
-        # 2. Determine Target: Decide where each squad should be going this frame.
-        target = self._get_squad_target(plan, cache)
+        target = self._get_army_target(plan, cache)
         if not target:
-            return []  # No valid target this frame.
+            return []
 
-        # 3. Delegate to Micro-Controllers and Issue Commands.
         actions: List[CommandFunctor] = []
         handled_tags: Set[int] = set()
 
-        # Get primary combat squads
-        bio_squad = self.squads.get("bio_squad_1")
-        mech_squad = self.squads.get("mech_squad_1")
-        support_squad = self.squads.get("support_squad_1")
+        bio_squad = next((s.units for s in self.squads.values() if "bio" in s.id), None)
+        mech_squad = next(
+            (s.units for s in self.squads.values() if "mech" in s.id), None
+        )
+        support_squad = next(
+            (s.units for s in self.squads.values() if "support" in s.id), None
+        )
 
-        # --- Delegate Bio Control ---
-        if bio_squad:
+        if bio_squad and bio_squad.exists:
             marines = bio_squad.of_type(UnitTypeId.MARINE)
-            if marines:
-                marine_actions, marine_tags = self.marine_controller.execute(
+            if marines.exists:
+                marine_actions, tags = self.marine_controller.execute(
                     marines, target, cache
                 )
                 actions.extend(marine_actions)
-                handled_tags.update(marine_tags)
-            # Add other bio controllers (e.g., MarauderController) here in the future.
+                handled_tags.update(tags)
 
-        # --- Delegate Support Control ---
-        if support_squad and bio_squad:
+        if support_squad and support_squad.exists and bio_squad:
             medivacs = support_squad.of_type(UnitTypeId.MEDIVAC)
-            if medivacs:
-                medivac_actions, medivac_tags = self.medivac_controller.execute(
-                    medivacs, bio_squad, target, cache
+            if medivacs.exists:
+                medivac_actions, tags = self.medivac_controller.execute(
+                    medivacs, bio_squad, target, cache, plan
                 )
                 actions.extend(medivac_actions)
-                handled_tags.update(medivac_tags)
+                handled_tags.update(tags)
 
-        # --- Delegate Mech Control ---
-        if mech_squad:
+        if mech_squad and mech_squad.exists:
             tanks = mech_squad.of_type(
                 {UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED}
             )
-            if tanks:
-                tank_actions, tank_tags = self.tank_controller.execute(
-                    tanks, target, cache
-                )
+            if tanks.exists:
+                tank_actions, tags = self.tank_controller.execute(tanks, target, cache)
                 actions.extend(tank_actions)
-                handled_tags.update(tank_tags)
+                handled_tags.update(tags)
 
-        # --- Fallback for unhandled units ---
-        # Any unit in a squad not handled by a micro-controller gets a default attack command.
-        for squad in self.squads.values():
-            unhandled_units = squad.tags_not_in(handled_tags)
-            if unhandled_units.exists:
-                # Generate one lambda FOR EACH unit in the unhandled group.
-                actions.extend(
-                    [lambda u=unit, t=target: u.attack(t) for unit in unhandled_units]
-                )
+        unhandled_units = cache.friendly_army_units.tags_not_in(handled_tags)
+        if unhandled_units.exists:
+            actions.extend(
+                [lambda u=unit, t=target: u.attack(t) for unit in unhandled_units]
+            )
 
         return actions
 
     def _update_squads(self, cache: "GlobalCache"):
-        """Maintains squad compositions, removing dead units and assigning new ones."""
-        all_army_tags = cache.friendly_army_units.tags
-
-        # Remove dead units from squads by rebuilding them with only alive units.
-        for squad_name, squad in self.squads.items():
-            current_tags = squad.tags
-            alive_tags = current_tags.intersection(all_army_tags)
-            if len(alive_tags) < len(current_tags):
-                self.squads[squad_name] = cache.friendly_army_units.tags_in(alive_tags)
-
-        # Find and assign new (unassigned) units.
+        all_army_units = cache.friendly_army_units
+        for squad in self.squads.values():
+            squad.units = squad.units.tags_in(all_army_units.tags)
         assigned_tags = {tag for squad in self.squads.values() for tag in squad.tags}
-        new_unit_tags = all_army_tags - assigned_tags
+        unassigned_units = all_army_units.tags_not_in(assigned_tags)
+        if unassigned_units.exists:
+            for unit in unassigned_units:
+                self._assign_unit_to_squad(unit, cache)
 
-        if new_unit_tags:
-            new_units = cache.friendly_army_units.tags_in(new_unit_tags)
-            for unit in new_units:
-                squad_name = self._get_squad_name_for_unit(unit)
-                if squad_name not in self.squads:
-                    self.squads[squad_name] = Units([], self.bot)
-                self.squads[squad_name].append(unit)
-                cache.logger.info(f"Assigned new {unit.name} to squad '{squad_name}'.")
+    def _assign_unit_to_squad(self, unit: "Unit", cache: "GlobalCache"):
+        squad_role = self._get_squad_role_for_unit(unit)
+        target_squad_id = f"{squad_role}_squad_1"
+        if target_squad_id not in self.squads:
+            self.squads[target_squad_id] = Squad(
+                id=target_squad_id, units=Units([], self.bot)
+            )
+            cache.logger.info(f"Created new squad: {target_squad_id}")
+        self.squads[target_squad_id].units.append(unit)
+        cache.logger.info(f"Assigned new {unit.name} to squad '{target_squad_id}'.")
 
-    def _get_squad_name_for_unit(self, unit: "Unit") -> str:
-        """Classifies a unit into a squad category."""
+    def _get_squad_role_for_unit(self, unit: "Unit") -> str:
         if unit.type_id in BIO_UNIT_TYPES:
-            return "bio_squad_1"
+            return "bio"
         if unit.type_id in MECH_UNIT_TYPES:
-            return "mech_squad_1"
+            return "mech"
         if unit.type_id in AIR_UNIT_TYPES:
-            return "air_squad_1"
+            return "air"
         if unit.type_id in SUPPORT_UNIT_TYPES:
-            return "support_squad_1"
-        return "default_squad"
+            return "support"
+        return "default"
 
-    def _get_squad_target(
-        self, plan: "FramePlan", cache: "GlobalCache"
-    ) -> "Point2" | None:
-        """
-        Determines the correct target point based on army stance. This implements
-        the crucial logic for rallying, staging, and attacking.
-        """
+    def _get_army_target(self, plan: "FramePlan", cache: "GlobalCache") -> "Point2":
+        """Determines the correct target point based on army stance."""
         stance = plan.army_stance
 
         if stance == ArmyStance.DEFENSIVE:
-            return getattr(plan, "defensive_position", None)
+            return getattr(plan, "defensive_position", self.bot.start_location)
 
         if stance == ArmyStance.AGGRESSIVE:
-            final_target_pos = getattr(plan, "target_location", None)
-            staging_point = getattr(plan, "staging_point", None)
+            final_target = getattr(plan, "target_location")
+            staging_point = getattr(plan, "staging_point")
 
-            # If no staging point is defined (e.g., early game), attack directly.
-            if not staging_point or not final_target_pos:
-                return final_target_pos
+            if not final_target:
+                return getattr(plan, "rally_point", self.bot.start_location)
 
-            # Use the main combat squad to determine the army's center of mass.
-            main_army = self.squads.get("bio_squad_1") or self.squads.get(
+            main_army_squad = self.squads.get("bio_squad_1") or self.squads.get(
                 "mech_squad_1"
             )
 
-            # If no army exists yet, the first units should move to the staging point.
-            if not main_army or not main_army.exists:
-                return staging_point
+            if not main_army_squad or not main_army_squad.units.exists:
+                return staging_point or final_target
 
-            # Smart Staging Logic: If the army is not yet at the staging point, the target IS the staging point.
-            # Once gathered, the target becomes the final enemy location.
-            if main_army.center.distance_to(staging_point) > 15:
-                cache.logger.debug("Army moving to staging point.")
-                return staging_point
-            else:
-                cache.logger.debug("Army is staged. Attacking final target.")
-                return final_target_pos
+            # --- MODIFICATION: Robust check for when to leave the staging point ---
+            # Instead of checking the squad's center, check if a high percentage of the squad
+            # has arrived at the staging area. This is more reliable for spread-out armies.
+            if staging_point:
+                gathered_units_count = main_army_squad.units.closer_than(
+                    15, staging_point
+                ).amount
+                squad_total_count = main_army_squad.units.amount
 
-        # Default for any other stance (or if no specific target is set).
-        return getattr(plan, "rally_point", None)
+                # Only attack if more than 80% of the squad is gathered.
+                if (gathered_units_count / squad_total_count) < 0.8:
+                    cache.logger.debug(
+                        f"Army gathering at staging point ({gathered_units_count}/{squad_total_count})."
+                    )
+                    return staging_point
+
+            cache.logger.debug("Army is staged. Attacking final target.")
+            return final_target
+
+        return getattr(plan, "rally_point", self.bot.start_location)

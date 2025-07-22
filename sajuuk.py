@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, List
 from sc2.bot_ai import BotAI
 from sc2.data import Race
 from sc2.unit import Unit
+from sc2.unit_command import UnitCommand  # Import for type checking
 
 from core.global_cache import GlobalCache
 from core.game_analysis import GameAnalyzer
@@ -28,6 +29,15 @@ class Sajuuk(BotAI):
 
     def __init__(self):
         super().__init__()
+
+        # --- FIX 1: Avoid the library's buggy distance calculation matrix ---
+        self.distance_calculation_method = 0
+
+        # --- FIX 2: Ensure unit methods return UnitCommand objects ---
+        # This tells the library that we will handle action execution by appending
+        # to self.actions, rather than using the old self.do() pattern.
+        self.unit_command_uses_self_do = True
+
         self.global_cache = GlobalCache()
         self.logger = self.global_cache.logger
         self.event_bus: "EventBus" = self.global_cache.event_bus
@@ -68,8 +78,6 @@ class Sajuuk(BotAI):
 
         self.game_analyzer.run(self)
 
-        # 3. CACHE: Populate the GlobalCache with a consistent snapshot for this frame.
-        # CHANGED: Pass the 'iteration' variable to the update method.
         self.global_cache.update(self, self.game_analyzer, iteration)
 
         log.info(
@@ -88,17 +96,17 @@ class Sajuuk(BotAI):
             f"Stance: {frame_plan.army_stance.name}"
         )
 
+        # --- FIX 3: Correctly process and queue actions ---
         if command_functors:
-            async_tasks: List[asyncio.Task] = []
             for func in command_functors:
-                result = func()
-                if asyncio.iscoroutine(result):
-                    async_tasks.append(result)
+                # Execute the lambda to get the UnitCommand object
+                action = func()
+                # Ensure it's a valid command before appending
+                if isinstance(action, UnitCommand):
+                    self.actions.append(action)
 
-            if async_tasks:
-                await asyncio.gather(*async_tasks)
-
-        log.debug(f"Executing {len(command_functors)} command functors.")
+        # The python-sc2 main loop will now execute everything in self.actions
+        log.debug(f"Queued {len(self.actions)} actions for execution.")
 
         await self.event_bus.process_events()
 

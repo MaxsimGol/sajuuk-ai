@@ -7,10 +7,15 @@ from core.interfaces.director_abc import Director
 from core.interfaces.manager_abc import Manager
 from core.types import CommandFunctor
 from core.frame_plan import EconomicStance
+
+# Unit Managers
 from .units.scv_manager import SCVManager
 from .units.mule_manager import MuleManager
+
+# Structure Managers
 from .structures.supply_manager import SupplyManager
 from .structures.expansion_manager import ExpansionManager
+from .structures.refinery_manager import RefineryManager
 from .structures.repair_manager import RepairManager
 from .structures.construction_manager import ConstructionManager
 
@@ -36,6 +41,8 @@ class InfrastructureDirector(Director):
         self.mule_manager = MuleManager(bot)
         self.supply_manager = SupplyManager(bot)
         self.expansion_manager = ExpansionManager(bot)
+        # --- MODIFICATION: Pass 'self' (the director instance) to the manager ---
+        self.refinery_manager = RefineryManager(bot, self)
         self.repair_manager = RepairManager(bot)
         self.construction_manager = ConstructionManager(bot)
 
@@ -45,6 +52,7 @@ class InfrastructureDirector(Director):
             self.mule_manager,
             self.supply_manager,
             self.expansion_manager,
+            self.refinery_manager,
             self.repair_manager,
             self.construction_manager,  # Construction is last to fulfill requests made this frame.
         ]
