@@ -44,7 +44,9 @@ class GlobalCache:
         # Analyzed State (Copied from GameAnalyzer)
         # MODIFICATION: Initialize with empty values, will be populated on first update
         self.friendly_units: "Units" | None = None
+        self.enemy_units: "Units" | None = None
         self.friendly_structures: "Units" | None = None
+        self.enemy_structures: "Units" | None = None
         self.friendly_workers: "Units" | None = None
         self.friendly_army_units: "Units" | None = None
         self.idle_production_structures: "Units" | None = None
@@ -88,11 +90,12 @@ class GlobalCache:
         self.friendly_upgrades = bot.state.upgrades
         self.enemy_units = bot.enemy_units
         self.enemy_structures = bot.enemy_structures
-
+        self.friendly_units = bot.units
+        self.enemy_units = bot.enemy_units
+        self.friendly_structures = bot.structures
+        self.enemy_structures = bot.enemy_structures
+        self.friendly_workers = bot.workers
         # --- Copy Final Analyzed State ---
-        self.friendly_units = analyzer.friendly_units
-        self.friendly_structures = analyzer.friendly_structures
-        self.friendly_workers = analyzer.friendly_workers
         self.friendly_army_units = analyzer.friendly_army_units
         self.idle_production_structures = analyzer.idle_production_structures
         self.threat_map = analyzer.threat_map
