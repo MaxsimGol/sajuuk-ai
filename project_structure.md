@@ -7,6 +7,7 @@
 │   ├── analysis
 │   │   ├── analysis_configuration.py
 │   │   ├── army_value_analyzer.py
+│   │   ├── base_threat_analyzer.py
 │   │   ├── expansion_analyzer.py
 │   │   ├── known_enemy_townhall_analyzer.py
 │   │   ├── threat_map_analyzer.py
@@ -21,6 +22,7 @@
 │   │   ├── director_abc.py
 │   │   ├── manager_abc.py
 │   │   └── race_general_abc.py
+│   ├── logger.py
 │   ├── types.py
 │   └── utilities
 │       ├── __init__.py
@@ -31,8 +33,32 @@
 │       └── unit_value.py
 ├── create_context.py
 ├── Design Document.md
-├── Files description.md
 ├── files.md
+├── logs
+│   ├── sajuuk_2025-07-24_08-29-25.log
+│   ├── sajuuk_2025-07-24_08-30-26.log
+│   ├── sajuuk_2025-07-24_08-31-03.2025-07-24_08-31-03_079829.log
+│   ├── sajuuk_2025-07-24_08-31-03.2025-07-24_09-05-29_911488.log
+│   ├── sajuuk_2025-07-24_08-31-03.log
+│   ├── sajuuk_2025-07-24_14-20-44.log
+│   ├── sajuuk_2025-07-24_14-24-44.log
+│   ├── sajuuk_2025-07-24_14-25-46.log
+│   ├── sajuuk_2025-07-24_14-57-23.log
+│   ├── sajuuk_2025-07-24_15-01-40.log
+│   ├── sajuuk_2025-07-24_15-13-57.log
+│   ├── sajuuk_2025-07-24_16-33-04.log
+│   ├── sajuuk_2025-07-24_16-37-00.log
+│   ├── sajuuk_2025-07-24_17-11-31.log
+│   ├── sajuuk_2025-07-24_18-57-17.log
+│   ├── sajuuk_2025-07-24_18-59-26.log
+│   ├── sajuuk_2025-07-24_19-01-30.log
+│   ├── sajuuk_2025-07-24_19-06-06.log
+│   ├── sajuuk_2025-07-24_19-07-45.log
+│   ├── sajuuk_2025-07-24_19-12-00.log
+│   ├── sajuuk_2025-07-24_19-18-48.log
+│   ├── sajuuk_2025-07-24_19-21-33.log
+│   ├── sajuuk_2025-07-24_19-30-21.log
+│   └── sajuuk_2025-07-24_19-34-47.log
 ├── protoss
 │   └── __init__.py
 ├── python_sc2_library_context.md
@@ -42,6 +68,7 @@
 ├── run_tests.py
 ├── Sajuuk-vs-EasyZerg.SC2Replay
 ├── sajuuk.py
+├── sajuuk_ai_context.md
 ├── scrape_sc2_library.py
 ├── terran
 │   ├── __init__.py
@@ -68,6 +95,7 @@
 │   │   │   ├── __init__.py
 │   │   │   ├── construction_manager.py
 │   │   │   ├── expansion_manager.py
+│   │   │   ├── refinery_manager.py
 │   │   │   ├── repair_manager.py
 │   │   │   └── supply_manager.py
 │   │   └── units
@@ -89,6 +117,7 @@
 │       ├── army_control_manager.py
 │       ├── positioning_manager.py
 │       ├── scouting_manager.py
+│       ├── squad.py
 │       └── tactical_director.py
 ├── tests
 │   ├── __init__.py
@@ -140,6 +169,7 @@
 │           ├── test_positioning_manager.py
 │           ├── test_scouting_manager.py
 │           └── test_tactical_director.py
+├── try.py
 └── zerg
     └── __init__.py
 ```

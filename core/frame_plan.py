@@ -1,10 +1,15 @@
+# core/frame_plan.py
 from __future__ import annotations
 from enum import Enum, auto
 from dataclasses import dataclass, field
-from sc2.ids.unit_typeid import UnitTypeId
-from sc2.ids.upgrade_id import UpgradeId
+from typing import TYPE_CHECKING, Dict, List, Set, Optional
 
-# --- Data Structures for Intentions ---
+if TYPE_CHECKING:
+    from sc2.ids.unit_typeid import UnitTypeId
+    from sc2.ids.upgrade_id import UpgradeId
+    from sc2.position import Point2
+
+# --- Strategic Stances ---
 
 
 class ArmyStance(Enum):
@@ -18,87 +23,56 @@ class ArmyStance(Enum):
 class EconomicStance(Enum):
     """Defines the high-level economic goal for the frame."""
 
-    NORMAL = auto()  # Default behavior, spend as resources become available.
-    SAVING_FOR_EXPANSION = auto()  # Prioritize saving for a new base.
-    SAVING_FOR_TECH = auto()  # Prioritize saving for a key tech structure.
+    NORMAL = auto()
+    SAVING_FOR_EXPANSION = auto()
+    SAVING_FOR_TECH = auto()
 
 
 @dataclass
 class ResourceBudget:
-    """
-    Defines the percentage-based resource allocation for a frame.
-    Values should sum to 100.
-    """
+    """Defines the resource allocation for a frame. Values should sum to 100."""
 
-    infrastructure: int = 20  # Builds your economy (bases, workers, supply).
-    capabilities: int = 80  # Army + Tech + Upgrades
-    tactics: int = 0  # e.g., for paid scouting like changelings
+    infrastructure: int = 50
+    capabilities: int = 50
+    tactics: int = 0
 
 
 class FramePlan:
     """
     An ephemeral "scratchpad" for the current frame's strategic intentions.
-
-    This object is created fresh by the General on every game step.
-    Directors write their high-level plans to it (e.g., budget, stance),
-    and other Directors or Managers can then read those plans to coordinate
-    their actions within the same frame.
-
-    This solves the intra-frame state conflict problem by providing a
-    clear, one-way flow of intent.
+    It is created fresh each step and populated by Directors to guide Managers.
     """
 
     def __init__(self):
-        # The resource allocation plan set by the InfrastructureDirector.
+        # --- High-Level Intentions (Set by Directors) ---
         self.resource_budget: ResourceBudget = ResourceBudget()
-
-        # The tactical plan set by the TacticalDirector.
         self.army_stance: ArmyStance = ArmyStance.DEFENSIVE
-
         self.economic_stance: EconomicStance = EconomicStance.NORMAL
 
-        # --- CAPABILITY GOALS ---
-        # A dictionary defining the desired army composition.
-        self.unit_composition_goal: dict[UnitTypeId, int] = field(default_factory=dict)
+        # --- Capability Goals (Set by CapabilityDirector) ---
+        self.unit_composition_goal: Dict[UnitTypeId, int] = field(default_factory=dict)
+        self.tech_goals: Set[UnitTypeId] = field(default_factory=set)
+        self.upgrade_goal: List[UpgradeId] = field(default_factory=list)
+        # --- ADDED BACK: The missing piece ---
+        # Defines the target count for each type of addon building.
+        # e.g., {UnitTypeId.BARRACKSTECHLAB: 1, UnitTypeId.BARRACKSREACTOR: 2}
+        self.addon_goal: Dict[UnitTypeId, int] = field(default_factory=dict)
 
-        # A set of all tech structures the bot wants to build this frame.
-        self.tech_goals: set[UnitTypeId] = field(default_factory=set)
-
-        # A prioritized list of upgrades the bot wants to research.
-        self.upgrade_goal: list[UpgradeId] = field(default_factory=list)
-        # A set of high-priority production requests for the frame.
-        self.production_requests: set[object] = set()
+        # --- Tactical Positions (Set by PositioningManager) ---
+        self.defensive_position: Optional["Point2"] = None
+        self.staging_point: Optional["Point2"] = None
+        self.rally_point: Optional["Point2"] = None
+        self.target_location: Optional["Point2"] = None
 
     def set_budget(self, infrastructure: int, capabilities: int, tactics: int = 0):
-        """
-        Sets the resource budget for the frame.
-        Called by the InfrastructureDirector.
-        Values should sum to 100
-        """
-        # Basic validation to ensure budget makes sense.
-        if (infrastructure + capabilities + tactics) != 100:
-            # In a real scenario, this would log a warning.
-            # For now, we silently fail or adjust.
-            pass
-        self.resource_budget = ResourceBudget(infrastructure, capabilities, tactics)
+        """Sets the resource budget for the frame. Called by InfrastructureDirector."""
+        if (infrastructure + capabilities + tactics) == 100:
+            self.resource_budget = ResourceBudget(infrastructure, capabilities, tactics)
 
     def set_army_stance(self, stance: ArmyStance):
-        """
-        Sets the army's tactical stance for the frame.
-        Called by the TacticalDirector.
-        """
+        """Sets the army's tactical stance. Called by TacticalDirector."""
         self.army_stance = stance
 
     def set_economic_stance(self, stance: EconomicStance):
-        """
-        Sets the bot's economic focus for the frame.
-        Called by the InfrastructureDirector.
-        """
+        """Sets the economic focus. Called by InfrastructureDirector."""
         self.economic_stance = stance
-
-    def add_production_request(self, request: object):
-        """
-        Adds a high-priority production item to the plan.
-        Useful for reactive builds (e.g., "Build a turret NOW").
-        """
-        self.production_requests.add(request)
