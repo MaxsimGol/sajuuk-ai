@@ -74,9 +74,9 @@ class GlobalCache:
         self.enemy_structures = bot.enemy_structures
 
         # --- Copy Final Analyzed State ---
-        self.friendly_units = analyzer.friendly_units
-        self.friendly_structures = analyzer.friendly_structures
-        self.friendly_workers = analyzer.friendly_workers
+        self.friendly_units = bot.units
+        self.friendly_structures = bot.structures
+        self.friendly_workers = bot.workers
         self.friendly_army_units = analyzer.friendly_army_units
         self.idle_production_structures = analyzer.idle_production_structures
         self.threat_map = analyzer.threat_map

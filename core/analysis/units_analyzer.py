@@ -40,20 +40,9 @@ class UnitsAnalyzer(AnalysisTask):
         On each frame, this method updates the GameAnalyzer with the current
         snapshot of all known units from its persistent memory.
         """
-        all_friendly_units = bot.units
 
-        analyzer.friendly_units = all_friendly_units
-        analyzer.friendly_structures = all_friendly_units.filter(
-            lambda u: u.is_structure
-        )
-        analyzer.friendly_workers = all_friendly_units.filter(
-            lambda u: u.type_id in WORKER_TYPES
-        )
-
-        analyzer.friendly_army_units = all_friendly_units.filter(
-            lambda u: not u.is_structure and not u.type_id in WORKER_TYPES
-        )
-        analyzer.idle_production_structures = analyzer.friendly_structures.of_type(
+        analyzer.friendly_army_units = bot.units - bot.workers
+        analyzer.idle_production_structures = bot.structures.of_type(
             TERRAN_PRODUCTION_TYPES
         ).idle
         analyzer.known_enemy_units = Units(self._known_enemy_units.values(), bot)

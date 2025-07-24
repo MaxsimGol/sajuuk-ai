@@ -30,9 +30,6 @@ class GameAnalyzer:
         # --- Analytical State Attributes ---
         self.friendly_army_value: int = 0
         self.enemy_army_value: int = 0
-        self.friendly_units: Units | None = None
-        self.friendly_structures: Units | None = None
-        self.friendly_workers: Units | None = None
         self.friendly_army_units: Units | None = None
         self.idle_production_structures: Units | None = None
         self.threat_map: np.ndarray | None = None
