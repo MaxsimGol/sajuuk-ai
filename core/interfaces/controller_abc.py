@@ -1,13 +1,13 @@
+# core/interfaces/controller_abc.py
+from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Set, Tuple
 
 from core.types import CommandFunctor
 
 if TYPE_CHECKING:
-    from sc2.position import Point2
-    from sc2.units import Units
-    from core.global_cache import GlobalCache
-    from core.frame_plan import FramePlan
+    # Import the new context object for type hinting.
+    from terran.tactics.micro_context import MicroContext
 
 
 class ControllerABC(ABC):
@@ -16,16 +16,18 @@ class ControllerABC(ABC):
     """
 
     @abstractmethod
-    def execute(
-        self, units: "Units", target: "Point2", cache: "GlobalCache", plan: "FramePlan"
-    ) -> tuple[list[CommandFunctor], set[int]]:
+    def execute(self, context: "MicroContext") -> tuple[list[CommandFunctor], set[int]]:
         """
-        Executes micro-management for a group of units.
+        Executes micro-management for the units specified in the context.
 
-        :param units: The Units object containing the units to be controlled.
-        :param target: The high-level strategic target.
-        :param cache: The global cache for accessing game state.
-        :param plan: The frame plan for accessing tactical positions.
-        :return: A tuple containing (list of command functors, set of handled unit tags).
+        This method is the single entry point for all micro-controllers. It
+        receives a unified context object, ensuring a consistent interface while
+        allowing access to both general and specialized game state information.
+
+        :param context: The MicroContext object containing all necessary data for
+                        this frame's decision-making, including the specific
+                        `units_to_control` and references to other friendly squads.
+        :return: A tuple containing a list of command functors to be executed and
+                a set of the unit tags that this controller has handled.
         """
         pass
